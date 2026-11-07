@@ -1,0 +1,32 @@
+{
+  "name": "vittora",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "setup": "tsx scripts/setup.ts",
+    "db": "tsx scripts/dev-db.ts",
+    "seed": "tsx scripts/seed.ts",
+    "dev": "turbo run dev --parallel",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "contract:gen": "pnpm --filter @vittora/api-contract gen",
+    "e2e": "pnpm --filter @vittora/web e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "embedded-postgres": "16.15.0-beta.19",
+    "eslint": "^9",
+    "pg": "^8",
+    "prettier": "^3",
+    "tsx": "^4",
+    "turbo": "^2",
+    "typescript": "^5",
+    "typescript-eslint": "^8",
+    "@types/node": "^22",
+    "@types/pg": "^8"
+  }
+}

@@ -1,0 +1,273 @@
+openapi: 3.1.0
+info:
+  title: Vittora API
+  version: 0.1.0
+  description: >
+    Contract for the Vittora API. x-access says who may call each operation:
+    "public" (anyone), "session" (signed in, two-step finished), "mfa-incomplete" (signed in,
+    two-step may be unfinished) or a capability such as "users.manage".
+servers:
+  - url: /api/v1
+components:
+  schemas:
+    Problem:
+      type: object
+      required: [status, code, title]
+      properties:
+        status: { type: integer }
+        code: { type: string }
+        title: { type: string }
+    MfaState:
+      type: string
+      enum: [pending, enroll, ok]
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    Code:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
+    User:
+      type: object
+      required: [id, name, email, role, status, mfaEnabled]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: [string, 'null'] }
+        role: { type: string }
+        status: { type: string }
+        mfaEnabled: { type: boolean }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    Partner:
+      type: object
+      required: [id, refCode, channelName, legalName, status, kycStatus]
+      properties:
+        id: { type: string, format: uuid }
+        refCode: { type: string }
+        channelName: { type: string }
+        legalName: { type: string }
+        status: { type: string }
+        kycStatus: { type: string }
+    Me:
+      type: object
+      required: [userId, role, mfaState, mfaEnabled, permissions, features]
+      properties:
+        userId: { type: string, format: uuid }
+        role: { type: string }
+        mfaState: { $ref: '#/components/schemas/MfaState' }
+        mfaEnabled: { type: boolean }
+        partner:
+          oneOf:
+            - $ref: '#/components/schemas/Partner'
+            - type: 'null'
+        features: { type: object, additionalProperties: true }
+        permissions: { type: array, items: { type: string } }
+  responses:
+    Error:
+      description: Problem
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+paths:
+  /auth/csrf:
+    get:
+      operationId: getCsrf
+      x-access: public
+      responses:
+        '200':
+          description: CSRF token, also set as a cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrfToken]
+                properties: { csrfToken: { type: string } }
+  /auth/login:
+    post:
+      operationId: login
+      x-access: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Credentials' }
+      responses:
+        '200':
+          description: Signed in; two-step may still be needed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mfaState]
+                properties: { mfaState: { $ref: '#/components/schemas/MfaState' } }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/logout:
+    post:
+      operationId: logout
+      x-access: mfa-incomplete
+      responses:
+        '204': { description: Signed out }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/sessions/revoke-all:
+    post:
+      operationId: revokeAllSessions
+      x-access: session
+      responses:
+        '204': { description: All sessions ended }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      x-access: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        '202':
+          description: Accepted, whether or not the account exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { accepted: { type: boolean } }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/password/reset:
+    post:
+      operationId: resetPassword
+      x-access: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string }
+      responses:
+        '204': { description: Password set }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/password/change:
+    post:
+      operationId: changePassword
+      x-access: session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+      responses:
+        '204': { description: Password changed }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/mfa/setup:
+    post:
+      operationId: startMfaSetup
+      x-access: mfa-incomplete
+      responses:
+        '200':
+          description: Secret to add to an authenticator app
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, otpauthUrl, qrDataUrl]
+                properties:
+                  secret: { type: string }
+                  otpauthUrl: { type: string }
+                  qrDataUrl: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/mfa/enable:
+    post:
+      operationId: enableMfa
+      x-access: mfa-incomplete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Code' }
+      responses:
+        '204': { description: Two-step sign-in is on }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/mfa/verify:
+    post:
+      operationId: verifyMfa
+      x-access: mfa-incomplete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Code' }
+      responses:
+        '204': { description: Two-step finished }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/mfa/email-otp:
+    post:
+      operationId: sendEmailOtp
+      x-access: mfa-incomplete
+      responses:
+        '202':
+          description: Code emailed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { accepted: { type: boolean } }
+        default: { $ref: '#/components/responses/Error' }
+  /me:
+    get:
+      operationId: getMe
+      x-access: mfa-incomplete
+      responses:
+        '200':
+          description: The signed-in user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        default: { $ref: '#/components/responses/Error' }
+  /users:
+    get:
+      operationId: listUsers
+      x-access: users.manage
+      responses:
+        '200':
+          description: Users in the caller's organisation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Error' }
+  /users/{id}:
+    get:
+      operationId: getUser
+      x-access: users.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: One user in the caller's organisation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Error' }

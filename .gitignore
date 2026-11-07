@@ -1,0 +1,19 @@
+node_modules/
+.next/
+dist/
+.turbo/
+coverage/
+playwright-report/
+test-results/
+*.log
+.DS_Store
+
+# Secrets and local data: never commit
+.env
+.env.*
+!.env.example
+.dev/
+
+# Kept private on purpose (the repo is public)
+vittora-partner-portal-PRD.md
+docs/prd/

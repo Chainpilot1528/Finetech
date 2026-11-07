@@ -1,0 +1,29 @@
+{
+  "name": "@vittora/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "typecheck": "tsc -p tsconfig.json",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5",
+    "@vittora/api-contract": "workspace:*",
+    "next": "^15",
+    "openapi-fetch": "^0.13",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "otplib": "^12",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

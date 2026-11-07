@@ -1,0 +1,9 @@
+{
+  "name": "@vittora/api-contract",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./generated/schema.d.ts", "./openapi.yaml": "./openapi.yaml" },
+  "types": "./generated/schema.d.ts",
+  "scripts": { "gen": "openapi-typescript openapi.yaml -o generated/schema.d.ts" },
+  "devDependencies": { "openapi-typescript": "^7", "typescript": "^5" }
+}
