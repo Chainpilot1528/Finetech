@@ -24,7 +24,9 @@
     "rxjs": "^7",
     "uuid": "^11",
     "yaml": "^2",
-    "zod": "^3"
+    "zod": "^3",
+    "@vittora/product-schemas": "workspace:*",
+    "sharp": "^0.34"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1",
@@ -39,6 +41,7 @@
     "supertest": "^7",
     "tsx": "^4",
     "typescript": "^5",
-    "vitest": "^3"
+    "vitest": "^3",
+    "@types/multer": "^1"
   }
 }

@@ -25,3 +25,17 @@ export function decrypt(keyBase64: string, packed: string): string {
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
 }
+
+/** Same scheme for file contents: iv, tag, then ciphertext. */
+export function encryptBytes(keyBase64: string, plain: Buffer): Buffer {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.from(keyBase64, 'base64'), iv);
+  const data = Buffer.concat([cipher.update(plain), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), data]);
+}
+
+export function decryptBytes(keyBase64: string, packed: Buffer): Buffer {
+  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(keyBase64, 'base64'), packed.subarray(0, 12));
+  decipher.setAuthTag(packed.subarray(12, 28));
+  return Buffer.concat([decipher.update(packed.subarray(28)), decipher.final()]);
+}

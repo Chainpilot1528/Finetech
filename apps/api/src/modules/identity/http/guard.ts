@@ -12,12 +12,15 @@ import { CONFIG } from '../ports/index.js';
 const PUBLIC = 'vittora:public';
 const MFA_INCOMPLETE_OK = 'vittora:mfa-incomplete-ok';
 const CAPABILITY = 'vittora:capability';
+const OPS_ONLY = 'vittora:ops-only';
 
 /** Anonymous access. Every other route is denied unless signed in. */
 export const Public = () => SetMetadata(PUBLIC, true);
 /** Reachable before two-step sign-in is finished. */
 export const MfaIncompleteOk = () => SetMetadata(MFA_INCOMPLETE_OK, true);
 export const Requires = (capability: Capability) => SetMetadata(CAPABILITY, capability);
+/** Internal staff only. Partner users get 403 whatever their role. */
+export const OpsOnly = () => SetMetadata(OPS_ONLY, true);
 
 export type AuthedRequest = Request & { principal?: Principal };
 
@@ -79,6 +82,9 @@ export class AppGuard implements CanActivate {
 
     if (principal.mfaState !== 'ok' && !this.flag<boolean>(MFA_INCOMPLETE_OK, ctx)) {
       throw new DomainError('MFA_REQUIRED', 403, 'Finish two-step sign-in first.');
+    }
+    if (this.flag<boolean>(OPS_ONLY, ctx) && principal.partnerId !== null) {
+      throw new DomainError('FORBIDDEN', 403, 'You do not have access to this.');
     }
     const capability = this.flag<Capability>(CAPABILITY, ctx);
     if (capability && !can(principal.role, capability, principal.features)) {

@@ -1,15 +1,22 @@
 'use client';
 
+import Link from 'next/link';
 import { useMe } from '@/features/auth/use-me';
 import { t } from '@/shared/messages';
 import { Alert } from '@/shared/ui';
 
 export default function DashboardPage() {
   const { data } = useMe();
+  const canKyc = data?.permissions.includes('kyc.manage');
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold tracking-tight">{t.dashboard.title}</h1>
-      {data?.partner?.kycStatus !== 'approved' && <Alert tone="info">{t.dashboard.kycBanner}</Alert>}
+      {data?.partner?.kycStatus !== 'approved' && (
+        <Alert tone="info">
+          {canKyc ? t.kyc.status[data?.partner?.kycStatus ?? ''] ?? t.dashboard.kycBanner : t.dashboard.kycBannerStaff}{' '}
+          {canKyc && <Link href="/app/kyc" className="font-semibold underline">{t.dashboard.kycAction}</Link>}
+        </Alert>
+      )}
       <section aria-label={t.dashboard.pipeline} className="rounded-xl border border-line bg-white p-5">
         <h2 className="text-sm font-semibold text-muted">{t.dashboard.pipeline}</h2>
         <ol className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">

@@ -17,6 +17,12 @@ export interface Delay {
   wait(ms: number): Promise<void>;
 }
 
+/** Lets identity show the partner on /me without depending on the partners module. */
+export interface PartnerReader {
+  get(ctx: { partnerId: string }): Promise<unknown>;
+}
+
+export const PARTNER_READER = Symbol('PARTNER_READER');
 export const MAILER = Symbol('MAILER');
 export const BREACHED_PASSWORDS = Symbol('BREACHED_PASSWORDS');
 export const DELAY = Symbol('DELAY');

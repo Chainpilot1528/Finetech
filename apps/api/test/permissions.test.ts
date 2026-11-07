@@ -21,6 +21,9 @@ const EXPECTED: Record<Capability, [admin: boolean, manager: boolean, executive:
   'settings.view': [true, true, true, true],
   'settings.edit': [true, false, false, false],
   'notifications.view': [true, true, true, true],
+  'kyc.manage': [true, false, false, false],
+  'kyc.review': [false, false, false, false],
+  'partners.view': [false, false, false, false],
 };
 
 describe('role matrix (§7.1)', () => {
@@ -40,10 +43,12 @@ describe('role matrix (§7.1)', () => {
   });
 
   it('gives internal roles nothing on the partner side', () => {
-    expect(capabilitiesFor('super_admin', inhouse)).toEqual([]);
+    expect(capabilitiesFor('super_admin', inhouse)).toEqual(['kyc.review', 'partners.view']);
+    expect(can('finance', 'kyc.review')).toBe(false);
   });
 
-  it('requires MFA only for Admin and Manager', () => {
+  it('requires MFA for Admin, Manager and all internal staff', () => {
     expect(PARTNER_ROLES.filter(requiresMfa)).toEqual(['admin', 'manager']);
+    expect(requiresMfa('kyc_reviewer')).toBe(true);
   });
 });

@@ -23,8 +23,24 @@ export const api = createClient<paths>({ baseUrl: '/api/v1', credentials: 'same-
 api.use(addCsrf);
 
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string) {
-    super(t.errors[code] ?? t.common.genericError);
+  constructor(readonly status: number, readonly code: string, readonly fields: Record<string, string> = {}, title?: string) {
+    super(t.errors[code] ?? title ?? t.common.genericError);
+  }
+}
+
+/** Sends a file. Multipart isn't covered by the typed client. */
+export async function uploadFile(path: string, file: File): Promise<void> {
+  const body = new FormData();
+  body.set('file', file);
+  const res = await fetch(`/api/v1${path}`, {
+    method: 'POST',
+    body,
+    credentials: 'same-origin',
+    headers: { 'x-csrf-token': await csrfToken() },
+  });
+  if (!res.ok) {
+    const problem = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, problem.code ?? 'UNKNOWN', problem.errors, problem.title);
   }
 }
 
@@ -34,8 +50,8 @@ export async function unwrap<T>(
 ): Promise<T> {
   const { data, error, response } = await call;
   if (!response.ok) {
-    const code = (error as { code?: string } | undefined)?.code ?? 'UNKNOWN';
-    throw new ApiError(response.status, code);
+    const problem = (error ?? {}) as { code?: string; errors?: Record<string, string>; title?: string };
+    throw new ApiError(response.status, problem.code ?? 'UNKNOWN', problem.errors, problem.title);
   }
   return data as T;
 }

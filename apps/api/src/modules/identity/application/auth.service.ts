@@ -63,7 +63,9 @@ export class AuthService {
     }
   }
 
-  async login(email: string, password: string, meta: RequestMeta): Promise<{ token: string; mfaState: MfaState }> {
+  async login(
+    email: string, password: string, meta: RequestMeta, realm: 'partner' | 'ops' = 'partner',
+  ): Promise<{ token: string; mfaState: MfaState }> {
     const now = this.clock.now();
     const emailHash = this.emailKey(email);
 
@@ -85,8 +87,9 @@ export class AuthService {
     const passwordOk = await argonVerify(user?.passwordHash ?? (await this.dummyHash), password);
 
     const locked = !!user?.lockedUntil && user.lockedUntil > now;
-    // Partner sign-in is for partner users only. Internal staff get their own realm (§7.2).
-    const allowed = !!user && passwordOk && !locked && user.status === 'active' && user.partnerId !== null;
+    // Each realm has its own sign-in. Internal staff can't use the partner one, or the reverse (§7.2).
+    const inRealm = realm === 'ops' ? user?.partnerId === null : !!user?.partnerId;
+    const allowed = !!user && passwordOk && !locked && user.status === 'active' && inRealm;
 
     if (!allowed) {
       await this.recordFailure(emailHash, recentFailures + 1, user, meta, now);
@@ -178,6 +181,17 @@ export class AuthService {
       await repo.revokeSessions(tx, p.userId, now);
       await writeAudit(tx, { actorId: p.userId, partnerId: p.partnerId, action: 'auth.sign_out_everywhere', ip: meta.ip, userAgent: meta.userAgent });
     });
+  }
+
+  /** Issues a first-password link in the caller's transaction, and returns the URL to send. */
+  async issueSetupLink(tx: Tx, userId: string): Promise<string> {
+    const now = this.clock.now();
+    const token = randomToken();
+    await repo.replaceToken(tx, {
+      id: uuid(), userId, purpose: 'password_setup', tokenHash: sha256(token),
+      expiresAt: new Date(now.getTime() + rules.LINK_TTL_MS), now,
+    });
+    return `${this.config.WEB_ORIGIN}/reset-password?token=${token}`;
   }
 
   /** Always succeeds from the caller's view, so it can't be used to discover accounts. */

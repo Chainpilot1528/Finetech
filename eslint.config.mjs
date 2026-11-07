@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/.next/**', '**/generated/**', '.dev/**', '**/next-env.d.ts', '**/*.mjs'] },
+  { ignores: ['**/node_modules/**', '**/.next/**', '**/.next-build/**', '**/generated/**', '.dev/**', '**/next-env.d.ts', '**/*.mjs'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

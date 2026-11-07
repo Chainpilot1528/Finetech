@@ -68,6 +68,77 @@ components:
             - type: 'null'
         features: { type: object, additionalProperties: true }
         permissions: { type: array, items: { type: string } }
+    Accepted:
+      type: object
+      properties: { accepted: { type: boolean } }
+    KycDocument:
+      type: object
+      required: [id, type, fileName, status]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        fileName: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reviewerNote: { type: [string, 'null'] }
+    Kyc:
+      type: object
+      required: [status, agreementAccepted, documents, required]
+      properties:
+        status: { type: string }
+        agreementAccepted: { type: boolean }
+        documents: { type: array, items: { $ref: '#/components/schemas/KycDocument' } }
+        required: { type: array, items: { type: string } }
+    OpsPartner:
+      type: object
+      required: [id, refCode, legalName, channelName, city, status, kycStatus]
+      properties:
+        id: { type: string, format: uuid }
+        refCode: { type: string }
+        legalName: { type: string }
+        channelName: { type: string }
+        city: { type: string }
+        status: { type: string }
+        kycStatus: { type: string }
+    OpsPartnerDetail:
+      allOf:
+        - $ref: '#/components/schemas/OpsPartner'
+        - type: object
+          required: [documents, required]
+          properties:
+            documents: { type: array, items: { $ref: '#/components/schemas/KycDocument' } }
+            required: { type: array, items: { type: string } }
+    Link:
+      type: object
+      required: [url]
+      properties: { url: { type: string } }
+    Draft:
+      type: object
+      required: [id, version, status, data, documents, requiredDocuments, consent]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer }
+        status: { type: string }
+        data: { type: object, additionalProperties: true }
+        documents:
+          type: array
+          items:
+            type: object
+            required: [docType, fileName]
+            properties: { docType: { type: string }, fileName: { type: string } }
+        requiredDocuments:
+          type: array
+          items:
+            type: object
+            required: [code, label, required]
+            properties: { code: { type: string }, label: { type: string }, required: { type: boolean } }
+        consent: { type: string, enum: [none, sent, given] }
+    CaseRef:
+      type: object
+      required: [id, caseNo, status]
+      properties:
+        id: { type: string, format: uuid }
+        caseNo: { type: string }
+        status: { type: string }
   responses:
     Error:
       description: Problem
@@ -270,4 +341,354 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/auth/login:
+    post:
+      operationId: opsLogin
+      x-access: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Credentials' }
+      responses:
+        '200':
+          description: Signed in; two-step is always needed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mfaState]
+                properties: { mfaState: { $ref: '#/components/schemas/MfaState' } }
+        default: { $ref: '#/components/responses/Error' }
+  /partners/register:
+    post:
+      operationId: registerPartner
+      x-access: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Accepted, whether or not the email is taken
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Accepted' }
+        default: { $ref: '#/components/responses/Error' }
+  /partner/agreement:
+    get:
+      operationId: getAgreement
+      x-access: kyc.manage
+      responses:
+        '200':
+          description: Current partner agreement
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: acceptAgreement
+      x-access: kyc.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: Accepted
+        default: { $ref: '#/components/responses/Error' }
+  /kyc:
+    get:
+      operationId: getKyc
+      x-access: kyc.manage
+      responses:
+        '200':
+          description: KYC status and documents
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Kyc' }
+        default: { $ref: '#/components/responses/Error' }
+  /kyc/documents/{type}:
+    post:
+      operationId: uploadKycDocument
+      x-access: kyc.manage
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+      responses:
+        '204':
+          description: Stored
+        default: { $ref: '#/components/responses/Error' }
+  /kyc/documents/{id}/url:
+    get:
+      operationId: kycDocumentUrl
+      x-access: kyc.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Short-lived link
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        default: { $ref: '#/components/responses/Error' }
+  /kyc/submit:
+    post:
+      operationId: submitKyc
+      x-access: kyc.manage
+      responses:
+        '204':
+          description: Sent for review
+        default: { $ref: '#/components/responses/Error' }
+  /files/{token}:
+    get:
+      operationId: readFile
+      x-access: public
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The file
+        default: { $ref: '#/components/responses/Error' }
+  /ops/partners:
+    get:
+      operationId: opsListPartners
+      x-access: partners.view
+      parameters:
+        - { name: kycStatus, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Partners
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/OpsPartner' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/partners/{id}:
+    get:
+      operationId: opsGetPartner
+      x-access: partners.view
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: One partner with documents
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpsPartnerDetail' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/partners/{id}/kyc-decision:
+    post:
+      operationId: opsDecideKyc
+      x-access: kyc.review
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: Decision saved
+        default: { $ref: '#/components/responses/Error' }
+  /ops/kyc/documents/{id}/url:
+    get:
+      operationId: opsKycDocumentUrl
+      x-access: kyc.review
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Short-lived link
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/kyc/documents/{id}/review:
+    post:
+      operationId: opsReviewKycDocument
+      x-access: kyc.review
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: Saved
+        default: { $ref: '#/components/responses/Error' }
+  /catalogue/products:
+    get:
+      operationId: listProducts
+      x-access: case.create
+      responses:
+        '200':
+          description: Products this partner can use
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, required: [code, name], properties: { code: { type: string }, name: { type: string } } }
+        default: { $ref: '#/components/responses/Error' }
+  /lenders:
+    get:
+      operationId: listLenders
+      x-access: case.create
+      parameters:
+        - { name: product, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Lenders offering the product
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string }, type: { type: string } } }
+        default: { $ref: '#/components/responses/Error' }
+  /cases/drafts:
+    post:
+      operationId: createDraft
+      x-access: case.create
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        '201':
+          description: Draft
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        default: { $ref: '#/components/responses/Error' }
+    get:
+      operationId: listDrafts
+      x-access: case.create
+      responses:
+        '200':
+          description: Your open drafts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, required: [id], properties: { id: { type: string }, product: { type: [string, 'null'] }, updatedAt: { type: string } } }
+        default: { $ref: '#/components/responses/Error' }
+  /cases/drafts/{id}:
+    get:
+      operationId: getDraft
+      x-access: case.create
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Draft
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: patchDraft
+      x-access: case.create
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Draft
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        default: { $ref: '#/components/responses/Error' }
+  /cases/drafts/{id}/documents/{docType}:
+    post:
+      operationId: uploadCaseDocument
+      x-access: case.create
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: docType, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+      responses:
+        '204':
+          description: Stored
+        default: { $ref: '#/components/responses/Error' }
+  /cases/drafts/{id}/consent-requests:
+    post:
+      operationId: requestConsent
+      x-access: case.create
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '202':
+          description: Sent
+        default: { $ref: '#/components/responses/Error' }
+  /cases/drafts/{id}/submit:
+    post:
+      operationId: submitDraft
+      x-access: case.create
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: The new case
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CaseRef' }
+        default: { $ref: '#/components/responses/Error' }
+  /public/consent/{token}:
+    get:
+      operationId: getConsentPage
+      x-access: public
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: What the customer is agreeing to
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: giveConsent
+      x-access: public
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: Recorded
         default: { $ref: '#/components/responses/Error' }

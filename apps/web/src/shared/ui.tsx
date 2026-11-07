@@ -1,6 +1,6 @@
 'use client';
 
-import type { ButtonHTMLAttributes, FormEvent, InputHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, FormEvent, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 import { useEffect, useId, useState } from 'react';
 import { t } from './messages';
 
@@ -8,16 +8,34 @@ import { t } from './messages';
 export const fieldValue = (e: FormEvent<HTMLFormElement>, name: string) =>
   String(new FormData(e.currentTarget).get(name) ?? '');
 
-export function Field({ label, ...input }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+const CONTROL =
+  'block w-full rounded-lg border bg-white px-3 py-2.5 text-base text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25';
+
+export function Field({ label, error, hint, ...input }: InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string; hint?: string }) {
   const id = useId();
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-medium text-ink">{label}</label>
-      <input
-        id={id}
-        {...input}
-        className="block w-full rounded-lg border border-line bg-white px-3 py-2.5 text-base text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
-      />
+      <input id={id} aria-invalid={!!error} aria-describedby={error ? `${id}-e` : undefined} {...input}
+        className={`${CONTROL} ${error ? 'border-red-400' : 'border-line'}`} />
+      {hint && !error && <p className="text-xs text-muted">{hint}</p>}
+      {error && <p id={`${id}-e`} className="text-sm text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+export function Select({ label, error, options, placeholder, ...rest }: SelectHTMLAttributes<HTMLSelectElement> & {
+  label: string; error?: string; placeholder?: string; options: { value: string; label: string }[];
+}) {
+  const id = useId();
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-ink">{label}</label>
+      <select id={id} aria-invalid={!!error} {...rest} className={`${CONTROL} ${error ? 'border-red-400' : 'border-line'}`}>
+        {placeholder !== undefined && <option value="">{placeholder}</option>}
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
   );
 }

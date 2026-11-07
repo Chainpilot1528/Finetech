@@ -5,6 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { DB, DevMailbox, MAILER, Public } from '../modules/identity/index.js';
 import type { Db } from './db.js';
 
+const HTTP_CODES: Record<number, string> = { 404: 'NOT_FOUND', 413: 'FILE_TOO_LARGE' };
+
 /** Every error leaves as RFC 7807 problem+json with a stable code. Stack traces never do (§14.6). */
 @Catch()
 export class ProblemFilter implements ExceptionFilter {
@@ -12,9 +14,9 @@ export class ProblemFilter implements ExceptionFilter {
     const res = host.switchToHttp().getResponse<Response>();
     const problem =
       err instanceof DomainError
-        ? { status: err.status, code: err.code, title: err.message }
+        ? { status: err.status, code: err.code, title: err.message, ...(err.errors ? { errors: err.errors } : {}) }
         : err instanceof HttpException
-          ? { status: err.getStatus(), code: err.getStatus() === 404 ? 'NOT_FOUND' : 'BAD_REQUEST', title: 'Request failed.' }
+          ? { status: err.getStatus(), code: HTTP_CODES[err.getStatus()] ?? 'BAD_REQUEST', title: 'Request failed.' }
           : { status: 500, code: 'INTERNAL_ERROR', title: 'Something went wrong on our side.' };
     if (problem.status >= 500) {
       console.error(JSON.stringify({ level: 'error', event: 'unhandled', name: (err as Error)?.name, message: (err as Error)?.message }));

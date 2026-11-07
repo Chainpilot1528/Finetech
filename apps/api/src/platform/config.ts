@@ -6,6 +6,9 @@ const schema = z.object({
   WEB_ORIGIN: z.string().url(),
   APP_DATABASE_URL: z.string().min(1),
   AUTH_DATABASE_URL: z.string().min(1),
+  OPS_DATABASE_URL: z.string().min(1),
+  /** Local encrypted file storage. Refused in production, which needs real object storage. */
+  STORAGE_DIR: z.string().default('.dev/storage'),
   /** 32 random bytes, base64. Encrypts MFA secrets. */
   ENCRYPTION_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes in base64'),
   /** Keys tokens, CSRF values and email lookups. */
@@ -27,6 +30,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   if (parsed.data.NODE_ENV === 'production' && parsed.data.DEV_MAILBOX === 'true') {
     throw new Error('Invalid configuration: DEV_MAILBOX must be off in production');
+  }
+  if (parsed.data.NODE_ENV === 'production') {
+    throw new Error('Invalid configuration: production needs real object storage, a virus scanner and an SMS provider');
   }
   return parsed.data;
 }

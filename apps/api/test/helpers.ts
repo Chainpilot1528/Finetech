@@ -1,4 +1,7 @@
 import { randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import { hash } from '@node-rs/argon2';
 import type { Clock, Role } from '@vittora/shared-kernel';
@@ -26,6 +29,7 @@ export interface Harness {
   delays: number[];
   breached: Set<string>;
   db: pg.Pool;
+  storageDir: string;
   close(): Promise<void>;
 }
 
@@ -34,11 +38,14 @@ export async function harness(): Promise<Harness> {
   const mail = new DevMailbox();
   const delays: number[] = [];
   const breached = new Set<string>();
+  const storageDir = mkdtempSync(join(tmpdir(), 'vittora-files-'));
   const config = loadConfig({
     NODE_ENV: 'test',
     WEB_ORIGIN: 'http://localhost:3000',
     APP_DATABASE_URL: process.env.TEST_APP_URL,
     AUTH_DATABASE_URL: process.env.TEST_AUTH_URL,
+    OPS_DATABASE_URL: process.env.TEST_OPS_URL,
+    STORAGE_DIR: storageDir,
     ENCRYPTION_KEY: randomBytes(32).toString('base64'),
     HMAC_KEY: randomBytes(32).toString('hex'),
     DEV_MAILBOX: 'false',
@@ -51,17 +58,17 @@ export async function harness(): Promise<Harness> {
   });
   await app.init();
   const db = owner();
-  return { app, clock, mail, delays, breached, db, close: async () => { await app.close(); await db.end(); } };
+  return { app, clock, mail, delays, breached, db, storageDir, close: async () => { await app.close(); await db.end(); rmSync(storageDir, { recursive: true, force: true }); } };
 }
 
 let n = 0;
-export async function createPartner(db: pg.Pool, features: object = {}) {
+export async function createPartner(db: pg.Pool, features: object = {}, kycStatus = 'not_started') {
   const id = uuid();
   n += 1;
   await db.query(
-    `INSERT INTO partner (id, ref_code, legal_name, channel_name, city, pincode, status, features)
-     VALUES ($1,$2,'Test Co','Test Channel','Testville','110001','active',$3)`,
-    [id, `TST-110-${id.slice(-6)}-${n}`, JSON.stringify(features)],
+    `INSERT INTO partner (id, ref_code, legal_name, channel_name, city, pincode, status, features, kyc_status)
+     VALUES ($1,$2,'Test Co','Test Channel','Testville','110001','active',$3,$4)`,
+    [id, `TST-110-${id.slice(-6)}-${n}`, JSON.stringify(features), kycStatus],
   );
   return id;
 }
@@ -100,6 +107,12 @@ export class Client {
   login(email: string, password = PASSWORD) {
     return this.post('/auth/login', { email, password });
   }
+  patch(path: string, body?: object) {
+    return this.agent.patch(`/api/v1${path}`).set('user-agent', this.ua).set('x-csrf-token', this.csrf).send(body);
+  }
+  upload(path: string, file: Buffer, name = 'file.pdf') {
+    return this.agent.post(`/api/v1${path}`).set('user-agent', this.ua).set('x-csrf-token', this.csrf).attach('file', file, name);
+  }
 }
 
 export const client = (h: Harness, ua?: string) => new Client(h.app, ua).start();
@@ -107,9 +120,9 @@ export const client = (h: Harness, ua?: string) => new Client(h.app, ua).start()
 const totpSecrets = new Map<string, string>();
 
 /** Signs in and finishes two-step when the role needs it. */
-export async function signedIn(h: Harness, email: string) {
+export async function signedIn(h: Harness, email: string, realm: 'partner' | 'ops' = 'partner') {
   const c = await client(h);
-  const res = await c.login(email);
+  const res = realm === 'ops' ? await c.post('/ops/auth/login', { email, password: PASSWORD }) : await c.login(email);
   const totp = (secret: string) => authenticator.clone({ epoch: h.clock.now().getTime() }).generate(secret);
   if (res.body.mfaState === 'enroll') {
     const setup = await c.post('/auth/mfa/setup');
@@ -123,6 +136,21 @@ export async function signedIn(h: Harness, email: string) {
     if (verified.status !== 204) throw new Error(`verify failed: ${JSON.stringify(verified.body)}`);
   }
   return c;
+}
+
+export const PDF = Buffer.from('%PDF-1.4\nfake test document\n%%EOF\n');
+
+export async function enableProducts(db: pg.Pool, partnerId: string, products = ['used_car', 'loan_against_car', 'personal']) {
+  for (const p of products) {
+    await db.query('INSERT INTO partner_product (partner_id, product_code, enabled_at) VALUES ($1,$2,now())', [partnerId, p]);
+  }
+}
+
+export async function createLender(db: pg.Pool, products = ['used_car', 'loan_against_car', 'personal']) {
+  const id = uuid();
+  await db.query(`INSERT INTO lender (id, name, type) VALUES ($1,'Test Bank','bank')`, [id]);
+  for (const p of products) await db.query('INSERT INTO lender_product (lender_id, product_code) VALUES ($1,$2)', [id, p]);
+  return id;
 }
 
 export const linkToken = (text: string) => /token=([\w-]+)/.exec(text)?.[1] ?? '';

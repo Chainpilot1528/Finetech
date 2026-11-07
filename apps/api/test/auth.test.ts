@@ -25,7 +25,10 @@ describe('sign in', () => {
     const cookie = String(res.headers['set-cookie']);
     expect(cookie).toMatch(/vittora_session=.*HttpOnly/);
     expect(cookie).toMatch(/SameSite=Lax/);
-    expect((await c.get('/me')).body.role).toBe('executive');
+    const me = await c.get('/me');
+    expect(me.body.role).toBe('executive');
+    expect(me.headers['cache-control']).toBe('no-store');
+    expect(me.headers.etag).toBeUndefined();
   });
 
   it('gives the same error for an unknown email and a wrong password', async () => {

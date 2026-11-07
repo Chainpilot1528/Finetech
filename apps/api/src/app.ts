@@ -7,10 +7,15 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import {
   AppGuard, AuthController, AuthService, BREACHED_PASSWORDS, type BreachedPasswordChecker, CLOCK, CONFIG, DB, DELAY,
-  type Delay, DevMailbox, MAILER, type Mailer, NoBreachCheck, PwnedPasswordsChecker, SmtpMailer, UsersController,
-  UsersService,
+  type Delay, DevMailbox, MAILER, type Mailer, NoBreachCheck, PARTNER_READER, PwnedPasswordsChecker, SmtpMailer,
+  UsersController, UsersService,
 } from './modules/identity/index.js';
-import { PartnersService } from './modules/partners/index.js';
+import { CasesController, CasesService } from './modules/cases/index.js';
+import {
+  KycService, OpsKycService, OpsPartnersController, PartnersController, PartnersService, RegistrationService,
+} from './modules/partners/index.js';
+import { DevScanner, FilesController, LocalEncryptedStore, type Scanner } from './platform/storage.js';
+import { DOCUMENT_STORE, SCANNER } from './platform/tokens.js';
 import type { Config } from './platform/config.js';
 import { Db } from './platform/db.js';
 import { DevMailController, HealthController, ProblemFilter, requestLog } from './platform/http.js';
@@ -20,6 +25,7 @@ export interface Overrides {
   mailer?: Mailer;
   breached?: BreachedPasswordChecker;
   delay?: Delay;
+  scanner?: Scanner;
 }
 
 @Module({})
@@ -33,7 +39,10 @@ class AppModule {
       o.breached ?? (config.BREACHED_PASSWORD_CHECK === 'true' ? new PwnedPasswordsChecker() : new NoBreachCheck());
     return {
       module: AppModule,
-      controllers: [AuthController, UsersController, HealthController, ...(devMailbox ? [DevMailController] : [])],
+      controllers: [
+        AuthController, UsersController, HealthController, PartnersController, OpsPartnersController, CasesController,
+        FilesController, ...(devMailbox ? [DevMailController] : []),
+      ],
       providers: [
         { provide: CONFIG, useValue: config },
         { provide: DB, useValue: new Db(config) },
@@ -41,9 +50,16 @@ class AppModule {
         { provide: MAILER, useValue: mailer },
         { provide: BREACHED_PASSWORDS, useValue: breached },
         { provide: DELAY, useValue: o.delay ?? { wait: (ms: number) => new Promise((r) => setTimeout(r, ms)) } },
+        { provide: DOCUMENT_STORE, useValue: new LocalEncryptedStore(config.STORAGE_DIR, config.ENCRYPTION_KEY) },
+        { provide: SCANNER, useValue: o.scanner ?? new DevScanner() },
         AuthService,
         UsersService,
         PartnersService,
+        { provide: PARTNER_READER, useExisting: PartnersService },
+        RegistrationService,
+        KycService,
+        OpsKycService,
+        CasesService,
         { provide: APP_GUARD, useClass: AppGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
       ],
@@ -59,6 +75,12 @@ export async function createApp(config: Config, overrides: Overrides = {}): Prom
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(cookieParser());
+  // API responses can hold personal data, so neither browsers nor proxies may keep them.
+  app.set('etag', false);
+  app.use((_req: unknown, res: { setHeader(k: string, v: string): void }, next: () => void) => {
+    res.setHeader('cache-control', 'no-store');
+    next();
+  });
   if (config.NODE_ENV !== 'test') app.use(requestLog);
   app.setGlobalPrefix('api/v1', { exclude: ['healthz', 'readyz'] });
   return app;

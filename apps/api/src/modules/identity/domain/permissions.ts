@@ -19,6 +19,9 @@ export const CAPABILITIES = [
   'settings.view',
   'settings.edit',
   'notifications.view',
+  'kyc.manage',
+  'kyc.review',
+  'partners.view',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -27,7 +30,7 @@ const MATRIX: Record<Role, readonly Capability[]> = {
     'dashboard.view', 'case.create', 'case.view_all', 'case.note', 'case.fieldwork',
     'case.inhouse_lifecycle', 'case.bank_allocate', 'case.bureau_pull', 'case.export', 'pii.reveal',
     'policy.manage', 'users.manage', 'invoices.manage', 'settings.view', 'settings.edit',
-    'notifications.view',
+    'notifications.view', 'kyc.manage',
   ],
   manager: [
     'dashboard.view', 'case.create', 'case.view_all', 'case.note', 'case.fieldwork',
@@ -39,12 +42,11 @@ const MATRIX: Record<Role, readonly Capability[]> = {
     'case.bureau_pull', 'pii.reveal', 'settings.view', 'notifications.view',
   ],
   viewer: ['dashboard.view', 'case.view_all', 'settings.view', 'notifications.view'],
-  // Internal roles get their capabilities with the ops console (Part 2 onwards).
-  ops_agent: [],
-  ops_lead: [],
-  kyc_reviewer: [],
-  finance: [],
-  super_admin: [],
+  ops_agent: ['partners.view'],
+  ops_lead: ['partners.view', 'kyc.review'],
+  kyc_reviewer: ['partners.view', 'kyc.review'],
+  finance: ['partners.view'],
+  super_admin: ['partners.view', 'kyc.review'],
 };
 
 /** Capabilities that also need a feature switched on for the partner (§7.1 †). */
@@ -66,5 +68,5 @@ export function capabilitiesFor(role: Role, features: Features = {}): Capability
   return CAPABILITIES.filter((c) => can(role, c, features));
 }
 
-/** MFA is mandatory for these roles (§4.1, §9.2). */
-export const requiresMfa = (role: Role) => role === 'admin' || role === 'manager';
+/** MFA is mandatory for Admin, Manager and every internal role (§4.1, §9.2). */
+export const requiresMfa = (role: Role) => role !== 'executive' && role !== 'viewer';

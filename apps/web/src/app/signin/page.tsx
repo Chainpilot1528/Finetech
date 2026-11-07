@@ -37,6 +37,7 @@ export default function SignInPage() {
         <Field label={t.signIn.password} type="password" autoComplete="current-password" name="password" required />
         <Button type="submit" busy={busy} className="w-full">{t.signIn.submit}</Button>
         <p className="text-center text-sm"><Link className="font-medium text-brand underline-offset-2 hover:underline" href="/forgot-password">{t.signIn.forgot}</Link></p>
+        <p className="text-center text-sm"><Link className="font-medium text-brand underline-offset-2 hover:underline" href="/signup">{t.signUp.link}</Link></p>
       </form>
     </AuthShell>
   );

@@ -6,6 +6,7 @@ export interface RolePasswords {
   owner: string;
   app: string;
   auth: string;
+  ops: string;
 }
 
 const quoteLiteral = (v: string) => `'${v.replace(/'/g, "''")}'`;
@@ -19,6 +20,7 @@ export async function bootstrapDatabase(adminUrl: string, dbName: string, pw: Ro
       ['vittora_owner', pw.owner],
       ['vittora_app', pw.app],
       ['vittora_auth', pw.auth],
+      ['vittora_ops', pw.ops],
     ];
     for (const [role, password] of roles) {
       const found = await client.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [role]);

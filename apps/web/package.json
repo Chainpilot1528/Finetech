@@ -14,7 +14,8 @@
     "next": "^15",
     "openapi-fetch": "^0.13",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "@vittora/product-schemas": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1",

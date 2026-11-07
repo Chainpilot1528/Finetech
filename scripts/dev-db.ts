@@ -14,7 +14,7 @@ const pg = new EmbeddedPostgres({
 if (!existsSync(`${dir}/PG_VERSION`)) await pg.initialise();
 await pg.start();
 await bootstrapDatabase(`postgres://postgres:${env.DB_ADMIN_PASSWORD}@127.0.0.1:${env.DB_PORT}/postgres`, 'vittora', {
-  owner: env.DB_OWNER_PASSWORD!, app: env.DB_APP_PASSWORD!, auth: env.DB_AUTH_PASSWORD!,
+  owner: env.DB_OWNER_PASSWORD!, app: env.DB_APP_PASSWORD!, auth: env.DB_AUTH_PASSWORD!, ops: env.DB_OPS_PASSWORD!,
 });
 const applied = await runMigrations(env.OWNER_DATABASE_URL!, resolve('db/migrations'));
 console.log(`Database ready on port ${env.DB_PORT}. New migrations: ${applied.join(', ') || 'none'}`);

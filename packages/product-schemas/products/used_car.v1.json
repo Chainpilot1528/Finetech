@@ -1,0 +1,152 @@
+{
+  "code": "used_car",
+  "name": "Used Car Loan",
+  "version": 1,
+  "secured": true,
+  "valueField": "carValue",
+  "collateralField": "registrationNumber",
+  "loanTypes": [
+    {
+      "code": "purchase",
+      "label": "Purchase",
+      "help": "Fresh loan to buy a used car"
+    },
+    {
+      "code": "refinance",
+      "label": "Refinance",
+      "help": "Loan against an already-owned car with no existing loan"
+    },
+    {
+      "code": "internal_bt",
+      "label": "Internal BT",
+      "help": "Balance transfer within the same lender"
+    },
+    {
+      "code": "external_bt",
+      "label": "External BT",
+      "help": "Balance transfer from one lender to another"
+    },
+    {
+      "code": "top_up",
+      "label": "Top-Up",
+      "help": "More money on a running car loan"
+    }
+  ],
+  "details": {
+    "type": "object",
+    "required": [
+      "carMake",
+      "carModel",
+      "carYear",
+      "registrationNumber",
+      "chassisNumber",
+      "engineNumber",
+      "carValue",
+      "seller"
+    ],
+    "properties": {
+      "carMake": {
+        "type": "string",
+        "title": "Car make",
+        "minLength": 2,
+        "maxLength": 60
+      },
+      "carModel": {
+        "type": "string",
+        "title": "Car model",
+        "minLength": 1,
+        "maxLength": 60
+      },
+      "carYear": {
+        "type": "integer",
+        "title": "Manufacturing year",
+        "minimum": 2000,
+        "maximum": 2030
+      },
+      "registrationNumber": {
+        "type": "string",
+        "title": "Registration number",
+        "pattern": "^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$",
+        "description": "For example MH12AB1234"
+      },
+      "chassisNumber": {
+        "type": "string",
+        "title": "Chassis number",
+        "minLength": 5,
+        "maxLength": 30
+      },
+      "engineNumber": {
+        "type": "string",
+        "title": "Engine number",
+        "minLength": 5,
+        "maxLength": 30
+      },
+      "carValue": {
+        "type": "integer",
+        "title": "Valuation (₹)",
+        "minimum": 10000
+      },
+      "seller": {
+        "type": "string",
+        "title": "Seller",
+        "enum": [
+          "dealer",
+          "individual"
+        ],
+        "x-labels": {
+          "dealer": "Dealer",
+          "individual": "Individual"
+        }
+      }
+    }
+  },
+  "documents": [
+    {
+      "code": "rc",
+      "label": "Registration certificate (RC)",
+      "required": true
+    },
+    {
+      "code": "insurance",
+      "label": "Car insurance",
+      "required": true
+    },
+    {
+      "code": "valuation_report",
+      "label": "Valuation report",
+      "required": true
+    },
+    {
+      "code": "sale_agreement",
+      "label": "Sale agreement or quotation",
+      "required": true,
+      "loanTypes": [
+        "purchase"
+      ]
+    },
+    {
+      "code": "loan_statement",
+      "label": "Existing loan statement",
+      "required": true,
+      "loanTypes": [
+        "internal_bt",
+        "external_bt"
+      ]
+    },
+    {
+      "code": "foreclosure_letter",
+      "label": "Foreclosure letter",
+      "required": true,
+      "loanTypes": [
+        "internal_bt",
+        "external_bt"
+      ]
+    }
+  ],
+  "limits": {
+    "minAmount": 100000,
+    "maxAmount": 5000000,
+    "minTenure": 12,
+    "maxTenure": 84
+  }
+}

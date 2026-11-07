@@ -55,10 +55,15 @@ describe('platform safety', () => {
     expect(s.unwrap()).toBe('ABCDE1234F');
   });
   it('refuses to boot on bad settings', () => {
+    const production = {
+      NODE_ENV: 'production', WEB_ORIGIN: 'https://x.test', APP_DATABASE_URL: 'a', AUTH_DATABASE_URL: 'b',
+      OPS_DATABASE_URL: 'c', ENCRYPTION_KEY: key, HMAC_KEY: 'k'.repeat(32),
+    };
     expect(() => loadConfig({})).toThrow(/Invalid configuration/);
     expect(() => loadConfig({
-      NODE_ENV: 'production', WEB_ORIGIN: 'https://x.test', APP_DATABASE_URL: 'a', AUTH_DATABASE_URL: 'b',
-      ENCRYPTION_KEY: key, HMAC_KEY: 'k'.repeat(32), DEV_MAILBOX: 'true',
+      ...production, DEV_MAILBOX: 'true',
     })).toThrow(/DEV_MAILBOX/);
+    // Local file storage, the dev scanner and the dev inbox must never reach real customers.
+    expect(() => loadConfig(production)).toThrow(/object storage/);
   });
 });

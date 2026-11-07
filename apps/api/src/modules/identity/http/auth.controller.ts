@@ -4,11 +4,10 @@ import type { CookieOptions, Response } from 'express';
 import { z } from 'zod';
 import type { Config } from '../../../platform/config.js';
 import { randomToken } from '../../../platform/crypto.js';
-import { PartnersService } from '../../partners/index.js';
 import { AuthService } from '../application/auth.service.js';
 import { capabilitiesFor } from '../domain/permissions.js';
 import { SESSION_ABSOLUTE_MS } from '../domain/rules.js';
-import { CONFIG } from '../ports/index.js';
+import { CONFIG, PARTNER_READER, type PartnerReader } from '../ports/index.js';
 import {
   type AuthedRequest, MfaIncompleteOk, Public, cookieNames, metaOf, principalOf, signCsrf,
 } from './guard.js';
@@ -30,7 +29,7 @@ const CodeBody = z.object({ code: z.string().regex(/^[0-9]{6}$/) });
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
-    @Inject(PartnersService) private readonly partners: PartnersService,
+    @Inject(PARTNER_READER) private readonly partners: PartnerReader,
     @Inject(CONFIG) private readonly config: Config,
   ) {}
 
@@ -56,6 +55,17 @@ export class AuthController {
       ...this.cookieOptions(true),
       maxAge: SESSION_ABSOLUTE_MS,
     });
+    return { mfaState };
+  }
+
+  /** The internal console's own sign-in. Sets the same cookie, but only staff accounts pass. */
+  @Public()
+  @Post('ops/auth/login')
+  @HttpCode(200)
+  async opsLogin(@Body() body: unknown, @Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
+    const input = parse(LoginBody, body);
+    const { token, mfaState } = await this.auth.login(input.email, input.password, metaOf(req), 'ops');
+    res.cookie(cookieNames(this.config).session, token, { ...this.cookieOptions(true), maxAge: SESSION_ABSOLUTE_MS });
     return { mfaState };
   }
 

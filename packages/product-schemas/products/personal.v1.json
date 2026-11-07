@@ -1,0 +1,35 @@
+{
+  "code": "personal",
+  "name": "Personal Loan",
+  "version": 1,
+  "secured": false,
+  "loanTypes": [
+    {
+      "code": "fresh",
+      "label": "Fresh",
+      "help": "A new personal loan"
+    },
+    {
+      "code": "bt",
+      "label": "BT",
+      "help": "Balance transfer from another lender"
+    },
+    {
+      "code": "top_up",
+      "label": "Top-Up",
+      "help": "More money on a running loan"
+    }
+  ],
+  "details": {
+    "type": "object",
+    "required": [],
+    "properties": {}
+  },
+  "documents": [],
+  "limits": {
+    "minAmount": 50000,
+    "maxAmount": 4000000,
+    "minTenure": 12,
+    "maxTenure": 60
+  }
+}

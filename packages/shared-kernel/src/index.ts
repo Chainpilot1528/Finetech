@@ -10,6 +10,8 @@ export class DomainError extends Error {
     readonly code: string,
     readonly status: number,
     message: string,
+    /** Field-level problems, safe to show to the caller. */
+    readonly errors?: Record<string, string>,
   ) {
     super(message);
     this.name = 'DomainError';

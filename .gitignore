@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-build/
 dist/
 .turbo/
 coverage/
@@ -17,3 +18,4 @@ test-results/
 # Kept private on purpose (the repo is public)
 vittora-partner-portal-PRD.md
 docs/prd/
+*.tsbuildinfo

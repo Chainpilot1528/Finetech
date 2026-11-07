@@ -16,6 +16,8 @@ const operations = Object.entries<Record<string, { 'x-access': string }>>(spec.p
 let h: Harness;
 const sessions = {} as Record<PartnerRole, Client>;
 let otherTenantUser: string;
+let reviewer: Client;
+let finance: Client;
 
 beforeAll(async () => {
   h = await harness();
@@ -25,12 +27,15 @@ beforeAll(async () => {
     sessions[role] = await signedIn(h, u.email);
   }
   otherTenantUser = (await createUser(h.db, await createPartner(h.db), 'viewer')).id;
+  reviewer = await signedIn(h, (await createUser(h.db, null, 'kyc_reviewer')).email, 'ops');
+  finance = await signedIn(h, (await createUser(h.db, null, 'finance')).email, 'ops');
 });
 afterAll(() => h.close());
 
 const call = (c: Client, op: { method: string; path: string }, id: string) => {
-  const url = op.path.replace('{id}', id);
-  return op.method === 'get' ? c.get(url) : c.post(url, {});
+  const url = op.path.replace('{id}', id).replace(/\{\w+\}/g, 'pan');
+  if (op.method === 'get') return c.get(url);
+  return op.method === 'patch' ? c.patch(url, {}) : c.post(url, {});
 };
 
 describe('contract', () => {
@@ -69,6 +74,22 @@ describe('every protected endpoint × every role', () => {
         else expect(res.status).toBe(403);
       });
     }
+  }
+});
+
+describe('every capability endpoint × internal staff', () => {
+  for (const op of operations.filter((o) => o.access.includes('.'))) {
+    const opsRoute = op.path.startsWith('/ops/');
+    it(`KYC reviewer ${opsRoute ? 'may' : 'may not'} ${op.method.toUpperCase()} ${op.path}`, async () => {
+      const res = await call(reviewer, op, uuid());
+      if (opsRoute) expect(res.status).not.toBe(403);
+      else expect(res.status).toBe(403);
+    });
+    it(`finance ${can('finance', op.access as Capability) ? 'may' : 'may not'} ${op.method.toUpperCase()} ${op.path}`, async () => {
+      const res = await call(finance, op, uuid());
+      if (can('finance', op.access as Capability)) expect(res.status).not.toBe(403);
+      else expect(res.status).toBe(403);
+    });
   }
 });
 

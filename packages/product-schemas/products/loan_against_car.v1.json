@@ -1,0 +1,116 @@
+{
+  "code": "loan_against_car",
+  "name": "Loan Against Car",
+  "version": 1,
+  "secured": true,
+  "valueField": "carValue",
+  "collateralField": "registrationNumber",
+  "loanTypes": [
+    {
+      "code": "fresh",
+      "label": "Fresh",
+      "help": "Car owned outright"
+    },
+    {
+      "code": "top_up",
+      "label": "Top-Up",
+      "help": "More money on a running loan"
+    },
+    {
+      "code": "bt",
+      "label": "BT",
+      "help": "Balance transfer from another lender"
+    }
+  ],
+  "details": {
+    "type": "object",
+    "required": [
+      "carMake",
+      "carModel",
+      "carYear",
+      "registrationNumber",
+      "chassisNumber",
+      "engineNumber",
+      "carValue",
+      "hypothecation"
+    ],
+    "properties": {
+      "carMake": {
+        "type": "string",
+        "title": "Car make",
+        "minLength": 2,
+        "maxLength": 60
+      },
+      "carModel": {
+        "type": "string",
+        "title": "Car model",
+        "minLength": 1,
+        "maxLength": 60
+      },
+      "carYear": {
+        "type": "integer",
+        "title": "Manufacturing year",
+        "minimum": 2000,
+        "maximum": 2030
+      },
+      "registrationNumber": {
+        "type": "string",
+        "title": "Registration number",
+        "pattern": "^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$",
+        "description": "For example MH12AB1234"
+      },
+      "chassisNumber": {
+        "type": "string",
+        "title": "Chassis number",
+        "minLength": 5,
+        "maxLength": 30
+      },
+      "engineNumber": {
+        "type": "string",
+        "title": "Engine number",
+        "minLength": 5,
+        "maxLength": 30
+      },
+      "carValue": {
+        "type": "integer",
+        "title": "Valuation (₹)",
+        "minimum": 10000
+      },
+      "hypothecation": {
+        "type": "string",
+        "title": "Current hypothecation",
+        "enum": [
+          "none",
+          "existing"
+        ],
+        "x-labels": {
+          "none": "No loan on this car",
+          "existing": "Existing loan on this car"
+        }
+      }
+    }
+  },
+  "documents": [
+    {
+      "code": "rc",
+      "label": "Registration certificate (RC), with NOC if needed",
+      "required": true
+    },
+    {
+      "code": "insurance",
+      "label": "Car insurance",
+      "required": true
+    },
+    {
+      "code": "valuation_report",
+      "label": "Valuation report",
+      "required": true
+    }
+  ],
+  "limits": {
+    "minAmount": 100000,
+    "maxAmount": 3000000,
+    "minTenure": 12,
+    "maxTenure": 60
+  }
+}

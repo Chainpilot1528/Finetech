@@ -16,6 +16,7 @@ const NAV = [
   { href: '/app/cases', label: t.nav.cases, needs: ['case.view_all', 'case.view_own'] },
   { href: '/app/invoices', label: t.nav.invoices, needs: 'invoices.manage' },
   { href: '/app/users', label: t.nav.users, needs: 'users.manage' },
+  { href: '/app/kyc', label: t.nav.kyc, needs: 'kyc.manage' },
   { href: '/app/settings', label: t.nav.settings, needs: 'settings.view' },
 ];
 
@@ -29,6 +30,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (me.data === null) router.replace('/signin');
     else if (me.data && me.data.mfaState !== 'ok') router.replace(nextStep(me.data.mfaState));
+    else if (me.data?.permissions.includes('partners.view')) router.replace('/ops');
   }, [me.data, router]);
 
   if (me.isError) return <div className="mx-auto max-w-5xl p-4"><ErrorState onRetry={() => me.refetch()} /></div>;
