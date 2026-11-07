@@ -79,10 +79,10 @@ describe('every protected endpoint × every role', () => {
 
 describe('every capability endpoint × internal staff', () => {
   for (const op of operations.filter((o) => o.access.includes('.'))) {
-    const opsRoute = op.path.startsWith('/ops/');
-    it(`KYC reviewer ${opsRoute ? 'may' : 'may not'} ${op.method.toUpperCase()} ${op.path}`, async () => {
+    const reviewerMay = can('kyc_reviewer', op.access as Capability);
+    it(`KYC reviewer ${reviewerMay ? 'may' : 'may not'} ${op.method.toUpperCase()} ${op.path}`, async () => {
       const res = await call(reviewer, op, uuid());
-      if (opsRoute) expect(res.status).not.toBe(403);
+      if (reviewerMay) expect(res.status).not.toBe(403);
       else expect(res.status).toBe(403);
     });
     it(`finance ${can('finance', op.access as Capability) ? 'may' : 'may not'} ${op.method.toUpperCase()} ${op.path}`, async () => {

@@ -97,7 +97,7 @@ test('works at phone width with no sideways scroll and a working menu', async ({
   expect(overflow).toBe(false);
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 });
 
 test('pages carry security headers and run clean under the CSP', async ({ page }) => {

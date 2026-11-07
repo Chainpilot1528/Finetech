@@ -161,6 +161,13 @@ describe('CSRF', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('CSRF_FAILED');
   });
+  it('a second tab gets the same CSRF token, so it does not break the first tab', async () => {
+    const c = await client(h);
+    const first = await c.agent.get('/api/v1/auth/csrf');
+    const second = await c.agent.get('/api/v1/auth/csrf');
+    expect(second.body.csrfToken).toBe(first.body.csrfToken);
+  });
+
   it('rejects a forged token and a foreign origin', async () => {
     const c = await client(h);
     const forged = await c.agent.post('/api/v1/auth/login').set('x-csrf-token', 'abc.def').set('cookie', 'vittora_csrf=abc.def').send({});

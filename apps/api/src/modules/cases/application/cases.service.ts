@@ -12,6 +12,7 @@ import { type DocumentStore, type Scanner, type UploadedFile, prepareUpload } fr
 import { CLOCK, CONFIG, DB, DOCUMENT_STORE, SCANNER } from '../../../platform/tokens.js';
 import { writeAudit } from '../../audit/index.js';
 import { MAILER, type Mailer, type Principal, type RequestMeta } from '../../identity/index.js';
+import { NotificationsService } from '../../notifications/index.js';
 
 const SECTIONS = ['setup', 'applicant', 'details', 'loan', 'income', 'documents'] as const;
 const CONSENT_TTL_MS = 48 * 3_600_000;
@@ -33,6 +34,7 @@ export class CasesService {
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(DOCUMENT_STORE) private readonly store: DocumentStore,
     @Inject(SCANNER) private readonly scanner: Scanner,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   private blind(kind: string, value: string) {
@@ -293,12 +295,12 @@ export class CasesService {
 
   async submit(p: Principal, ctx: TenantContext, id: string, confirmDuplicate: boolean, meta: RequestMeta) {
     const now = this.clock.now();
-    return this.db.withTenant(ctx, async (tx) => {
+    const { mail, ...created } = await this.db.withTenant(ctx, async (tx) => {
       const row = await this.loadDraft(tx, p, id, true);
       if (row.status === 'submitted') {
         // Replays return the original result, so a double click can't make two cases.
         const { rows } = await tx.query(`SELECT id, case_no AS "caseNo", status FROM loan_case WHERE source_draft_id = $1`, [id]);
-        return rows[0];
+        return { ...rows[0], mail: [] };
       }
       await this.requireApprovedKyc(tx);
       const data = this.open(row);
@@ -345,12 +347,12 @@ export class CasesService {
       const applicantId = uuid();
       await tx.query(
         `INSERT INTO applicant (id, partner_id, full_name_enc, phone_enc, phone_hash, email_enc, pan_enc, pan_hash,
-           aadhaar_last4, dob_enc, address_enc, pincode, city, state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+           aadhaar_last4, dob_enc, address_enc, pincode, city, state, phone_last4)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [applicantId, ctx.partnerId, encrypt(key, applicant.fullName!), encrypt(key, applicant.phone!),
          this.blind('phone', applicant.phone!), applicant.email ? encrypt(key, applicant.email) : null,
          encrypt(key, applicant.pan!), panHash, applicant.aadhaarLast4, encrypt(key, applicant.dob!),
-         encrypt(key, applicant.address!), applicant.pincode, applicant.city, applicant.state],
+         encrypt(key, applicant.address!), applicant.pincode, applicant.city, applicant.state, applicant.phone!.slice(-4)],
       );
       const caseId = uuid();
       const caseNo = this.newCaseNo(now);
@@ -358,8 +360,8 @@ export class CasesService {
         `INSERT INTO loan_case (id, case_no, partner_id, created_by_user_id, source_draft_id, case_type, product,
            details_schema_version, loan_type, preferred_lender_id, applicant_id, loan_amount_paise, tenure_months, purpose,
            employment_type, monthly_income_paise, existing_emi_paise, company_name, work_experience_years, bureau_score,
-           product_details, collateral_key_hash, possible_duplicate, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,'open_market',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$23)`,
+           product_details, collateral_key_hash, possible_duplicate, created_at, updated_at, owner_user_id, status_changed_at)
+         VALUES ($1,$2,$3,$4,$5,'open_market',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$23,$4,$23)`,
         [caseId, caseNo, ctx.partnerId, p.userId, id, product.code, product.version, setup.loanType, setup.lenderId,
          applicantId, BigInt(loan.amount!) * 100n, loan.tenureMonths, loan.purpose ?? null, income.employmentType,
          BigInt(income.monthlyIncome!) * 100n, BigInt(income.existingEmi ?? 0) * 100n, income.companyName ?? null,
@@ -375,7 +377,10 @@ export class CasesService {
       // The encrypted fields above now hold the data, so the draft copy goes.
       await tx.query(`UPDATE case_draft SET status = 'submitted', data_enc = $2, updated_at = $3 WHERE id = $1`, [id, this.seal({}), now]);
       await writeAudit(tx, { actorId: p.userId, partnerId: ctx.partnerId, action: 'case.registered', entity: 'case', entityId: caseId, after: { product: product.code }, ip: meta.ip, userAgent: meta.userAgent });
-      return { id: caseId, caseNo, status: 'REGISTERED' };
+      const mail = await this.notifications.caseChanged(tx, { partnerId: ctx.partnerId, caseId, caseNo, ownerId: p.userId, status: 'REGISTERED', actorId: p.userId });
+      return { id: caseId, caseNo, status: 'REGISTERED', mail };
     });
+    this.notifications.send(mail);
+    return created;
   }
 }

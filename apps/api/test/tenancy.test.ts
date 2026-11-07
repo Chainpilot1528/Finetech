@@ -78,9 +78,25 @@ describe('in the database, even if the app code is wrong', () => {
     await expect(asTenant(a, (c) => c.query('SELECT mfa_secret_enc FROM app_user'))).rejects.toThrow(/permission denied/);
   });
 
-  it('the app role can not change users or read sessions', async () => {
-    await expect(asTenant(a, (c) => c.query(`UPDATE app_user SET role = 'admin'`))).rejects.toThrow(/permission denied/);
+  it('the app role can not touch credentials, move users between tenants, or read sessions', async () => {
+    for (const column of [`password_hash = 'x'`, 'mfa_enabled = false', `mfa_secret_enc = 'x'`, 'locked_until = NULL', `partner_id = '${b}'`]) {
+      await expect(asTenant(a, (c) => c.query(`UPDATE app_user SET ${column}`)), column).rejects.toThrow(/permission denied/);
+    }
     await expect(asTenant(a, (c) => c.query('SELECT * FROM session'))).rejects.toThrow(/permission denied/);
+  });
+
+  it('team changes stay inside the tenant, and never reach an internal role', async () => {
+    const other = await createUser(h.db, b, 'viewer');
+    const moved = await asTenant(a, (c) => c.query(`UPDATE app_user SET role = 'admin' WHERE id = $1`, [other.id]));
+    expect(moved.rowCount).toBe(0);
+    await createUser(h.db, a, 'viewer');
+    await expect(asTenant(a, (c) => c.query(`UPDATE app_user SET role = 'super_admin'`))).rejects.toThrow(/role_matches_realm/);
+  });
+
+  it('session and invite functions do nothing to another tenant', async () => {
+    const other = await createUser(h.db, b, 'viewer', { status: 'invited', password: false });
+    const issued = await asTenant(a, (c) => c.query('SELECT partner_user_setup_token($1,$2,$3,now() + interval \'1 hour\',now()) AS ok', [uuid(), other.id, 'hash']));
+    expect(issued.rows[0].ok).toBe(false);
   });
 
   it('audit rows can not be written for another tenant', async () => {

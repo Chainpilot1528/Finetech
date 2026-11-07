@@ -16,7 +16,7 @@ const w = t.wizard;
 const numberOrUndefined = (v: string) => (v === '' ? undefined : Number(v));
 const shown = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
-export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { caseNo: string }) => void }) {
+export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { id: string; caseNo: string }) => void }) {
   const queries = useQueryClient();
   const draft = useQuery({
     queryKey: ['draft', draftId],

@@ -4,12 +4,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { useMe } from '@/features/auth/use-me';
+import { BillingReview } from '@/features/billing-review';
 import { api, unwrap } from '@/shared/api';
 import { t } from '@/shared/messages';
 import { Alert, Button, ErrorState, Field, Skeleton } from '@/shared/ui';
 
 export default function OpsPartnerPage() {
   const { id } = useParams<{ id: string }>();
+  const { data: me } = useMe();
   const queries = useQueryClient();
   const partner = useQuery({
     queryKey: ['ops-partner', id],
@@ -82,6 +85,7 @@ export default function OpsPartnerPage() {
           <Button ghost onClick={() => decide('rejected')}>{t.ops.rejectPartner}</Button>
         </div>
       )}
+      {me?.permissions.includes('kyc.review') && <BillingReview partnerId={id} />}
     </div>
   );
 }

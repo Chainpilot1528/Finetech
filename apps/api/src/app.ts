@@ -10,9 +10,13 @@ import {
   type Delay, DevMailbox, MAILER, type Mailer, NoBreachCheck, PARTNER_READER, PwnedPasswordsChecker, SmtpMailer,
   UsersController, UsersService,
 } from './modules/identity/index.js';
-import { CasesController, CasesService } from './modules/cases/index.js';
 import {
-  KycService, OpsKycService, OpsPartnersController, PartnersController, PartnersService, RegistrationService,
+  CasesController, CasesService, OpsCasesController, OpsCasesService, TrackingController, TrackingService,
+} from './modules/cases/index.js';
+import { CommissionsService, InvoicesController, OpsFinanceController, OpsFinanceService } from './modules/commissions/index.js';
+import { NotificationsController, NotificationsService } from './modules/notifications/index.js';
+import {
+  KycService, OpsKycService, OpsPartnersController, PartnersController, PartnersService, RegistrationService, SettingsService,
 } from './modules/partners/index.js';
 import { DevScanner, FilesController, LocalEncryptedStore, type Scanner } from './platform/storage.js';
 import { DOCUMENT_STORE, SCANNER } from './platform/tokens.js';
@@ -41,7 +45,7 @@ class AppModule {
       module: AppModule,
       controllers: [
         AuthController, UsersController, HealthController, PartnersController, OpsPartnersController, CasesController,
-        FilesController, ...(devMailbox ? [DevMailController] : []),
+        TrackingController, OpsCasesController, InvoicesController, OpsFinanceController, NotificationsController, FilesController, ...(devMailbox ? [DevMailController] : []),
       ],
       providers: [
         { provide: CONFIG, useValue: config },
@@ -59,7 +63,13 @@ class AppModule {
         RegistrationService,
         KycService,
         OpsKycService,
+        NotificationsService,
+        CommissionsService,
+        OpsFinanceService,
         CasesService,
+        TrackingService,
+        OpsCasesService,
+        SettingsService,
         { provide: APP_GUARD, useClass: AppGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
       ],

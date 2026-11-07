@@ -154,3 +154,71 @@ export async function createLender(db: pg.Pool, products = ['used_car', 'loan_ag
 }
 
 export const linkToken = (text: string) => /token=([\w-]+)/.exec(text)?.[1] ?? '';
+
+let caseSeq = 0;
+
+/** Takes a case all the way through the wizard: draft, documents, customer consent, submit. */
+export async function makeCase(h: Harness, c: Client, lenderId: string, over: { name?: string; phone?: string; amount?: number } = {}) {
+  caseSeq += 1;
+  const n = String(1000 + caseSeq + Math.floor(Math.random() * 8000)).slice(-4);
+  const draft = (await c.post('/cases/drafts').set('idempotency-key', uuid())).body;
+  const saved = await c.patch(`/cases/drafts/${draft.id}`, {
+    version: draft.version,
+    data: {
+      setup: { product: 'used_car', loanType: 'purchase', lenderId },
+      applicant: {
+        fullName: over.name ?? 'Ravi Kumar', email: `cust-${uuid()}@example.test`, phone: over.phone ?? `98765${n}0`.slice(0, 10), pan: `ABCDE${n}F`,
+        aadhaarLast4: '4321', dob: '1990-05-01', address: '12 Test Road, Delhi', pincode: '110001', city: 'Delhi', state: 'Delhi',
+      },
+      details: {
+        carMake: 'Maruti', carModel: 'Swift', carYear: 2020, registrationNumber: `MH12AB${n}`, chassisNumber: 'CHASSIS123',
+        engineNumber: 'ENGINE1234', carValue: 600000, seller: 'dealer',
+      },
+      loan: { amount: over.amount ?? 400000, tenureMonths: 48, purpose: 'Buy a car' },
+      income: { employmentType: 'salaried', monthlyIncome: 60000, companyName: 'Acme', workExperienceYears: 5, existingEmi: 5000 },
+      documents: { aadhaarMaskedConfirmed: true },
+    },
+  });
+  if (saved.status !== 200) throw new Error(`draft failed: ${JSON.stringify(saved.body)}`);
+  for (const d of saved.body.requiredDocuments.filter((x: { required: boolean }) => x.required)) {
+    await c.upload(`/cases/drafts/${draft.id}/documents/${d.code}`, PDF);
+  }
+  await c.post(`/cases/drafts/${draft.id}/consent-requests`);
+  await new Promise((r) => setImmediate(r));
+  const link = h.mail.messages.find((m) => m.subject.includes('confirm your loan'))!;
+  const token = /\/consent\/([\w-]+)/.exec(link.text)![1];
+  await (await client(h, 'customer-phone')).post(`/public/consent/${token}`);
+  const res = await c.post(`/cases/drafts/${draft.id}/submit`, { confirmDuplicate: true }).set('idempotency-key', uuid());
+  if (res.status !== 201) throw new Error(`submit failed: ${JSON.stringify(res.body)}`);
+  return { id: res.body.id as string, caseNo: res.body.caseNo as string, registration: `MH12AB${n}` };
+}
+
+export const opsSession = async (h: Harness, role: Role) => signedIn(h, (await createUser(h.db, null, role)).email, 'ops');
+
+export const opsVersion = async (ops: Client, id: string) => String((await ops.get(`/ops/cases/${id}`)).body.version);
+
+export async function opsMove(ops: Client, id: string, body: object) {
+  const version = await opsVersion(ops, id);
+  return ops.post(`/ops/cases/${id}/transitions`, body).set('if-match', version);
+}
+
+/** Runs a case from REGISTERED to DISBURSAL_IN_PROGRESS. */
+export async function toDisbursing(ops: Client, id: string, lenderId: string, sanctionedAmount = 400000) {
+  for (const body of [
+    { to: 'IN_REVIEW', lenderId },
+    { to: 'APPROVED', sanctionedAmount, roiBps: 1150, tenureMonths: 48 },
+    { to: 'CUSTOMER_APPROVED' },
+    { to: 'DISBURSAL_IN_PROGRESS', checklistComplete: true },
+  ]) {
+    const res = await opsMove(ops, id, body);
+    if (res.status !== 200) throw new Error(`move failed: ${JSON.stringify(res.body)}`);
+  }
+}
+
+let utrSeq = 0;
+export const utr = () => `UTR${Date.now()}${String((utrSeq += 1)).padStart(4, '0')}`.slice(0, 22);
+
+export async function disburse(h: Harness, ops: Client, id: string, amount: number, isFinal = true) {
+  const version = await opsVersion(ops, id);
+  return ops.post(`/ops/cases/${id}/disbursals`, { utr: utr(), amount, disbursedOn: h.clock.now().toISOString().slice(0, 10), isFinal }).set('if-match', version);
+}
