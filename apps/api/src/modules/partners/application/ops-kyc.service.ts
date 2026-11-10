@@ -5,7 +5,9 @@ import type { Db } from '../../../platform/db.js';
 import { signFileLink } from '../../../platform/storage.js';
 import { CLOCK, CONFIG, DB } from '../../../platform/tokens.js';
 import { writeAudit } from '../../audit/index.js';
-import { MAILER, type Mailer, type Principal, type RequestMeta } from '../../identity/index.js';
+import { Outbox } from '../../../platform/outbox.js';
+import { type Page, afterClause, limitParam, toPage } from '../../../platform/paging.js';
+import { type Principal, type RequestMeta } from '../../identity/index.js';
 import { REQUIRED_KYC } from './kyc.service.js';
 
 const PARTNER_COLUMNS = `id, ref_code AS "refCode", legal_name AS "legalName", channel_name AS "channelName", city,
@@ -17,23 +19,32 @@ export class OpsKycService {
     @Inject(DB) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(CONFIG) private readonly config: Config,
-    @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(Outbox) private readonly outbox: Outbox,
   ) {}
 
-  list(kycStatus?: string) {
+  // Every staff read of partner data writes an audit row in the same transaction (SEC-02, §7.2, §9.5).
+
+  list(p: Principal, meta: RequestMeta, page: Page, kycStatus?: string) {
     return this.db.withOps(async (tx) => {
+      const params: unknown[] = [kycStatus ?? null];
+      const after = afterClause(page, 'created_at', 'id', params);
+      const limit = limitParam(page, params);
       const { rows } = await tx.query(
-        `SELECT ${PARTNER_COLUMNS} FROM partner WHERE ($1::text IS NULL OR kyc_status = $1) ORDER BY created_at LIMIT 100`,
-        [kycStatus ?? null],
+        `SELECT ${PARTNER_COLUMNS}, created_at::text AS _sort FROM partner WHERE ($1::text IS NULL OR kyc_status = $1) AND ${after}
+         ORDER BY created_at, id LIMIT ${limit}`,
+        params,
       );
-      return rows;
+      const result = toPage(rows, page);
+      await writeAudit(tx, { actorId: p.userId, action: 'ops.partners_listed', entity: 'partner', after: { kycStatus: kycStatus ?? null, count: result.data.length }, ip: meta.ip, userAgent: meta.userAgent });
+      return result;
     });
   }
 
-  async get(id: string) {
+  async get(p: Principal, id: string, meta: RequestMeta) {
     return this.db.withOps(async (tx) => {
       const partner = await tx.query(`SELECT ${PARTNER_COLUMNS} FROM partner WHERE id = $1`, [id]);
       if (!partner.rowCount) throw new DomainError('NOT_FOUND', 404, 'Partner not found.');
+      await writeAudit(tx, { actorId: p.userId, partnerId: id, action: 'ops.partner_viewed', entity: 'partner', entityId: id, ip: meta.ip, userAgent: meta.userAgent });
       const docs = await tx.query(
         `SELECT id, type, file_name AS "fileName", status, reviewer_note AS "reviewerNote"
          FROM kyc_document WHERE partner_id = $1 ORDER BY type`,
@@ -43,16 +54,17 @@ export class OpsKycService {
     });
   }
 
-  async documentLink(id: string) {
+  async documentLink(p: Principal, id: string, meta: RequestMeta) {
     const doc = await this.db.withOps(async (tx) => {
       const { rows } = await tx.query(
-        `SELECT object_key AS "objectKey", mime, file_name AS "fileName" FROM kyc_document WHERE id = $1`,
+        `SELECT object_key AS "objectKey", mime, file_name AS "fileName", partner_id FROM kyc_document WHERE id = $1`,
         [id],
       );
+      if (rows[0]) await writeAudit(tx, { actorId: p.userId, partnerId: rows[0].partner_id, action: 'ops.kyc_document_viewed', entity: 'kyc_document', entityId: id, ip: meta.ip, userAgent: meta.userAgent });
       return rows[0];
     });
     if (!doc) throw new DomainError('NOT_FOUND', 404, 'Document not found.');
-    return { url: signFileLink(this.config, this.clock, doc) };
+    return { url: signFileLink(this.config, this.clock, { objectKey: doc.objectKey, mime: doc.mime, fileName: doc.fileName }) };
   }
 
   async reviewDocument(p: Principal, id: string, decision: 'approved' | 'rejected', note: string | undefined, meta: RequestMeta) {
@@ -94,16 +106,18 @@ export class OpsKycService {
       );
       await writeAudit(tx, { actorId: p.userId, partnerId, action: `kyc.${decision}`, entity: 'partner', entityId: partnerId, ip: meta.ip, userAgent: meta.userAgent });
       const { rows } = await tx.query(`SELECT email FROM app_user WHERE partner_id = $1 AND role = 'admin' AND status = 'active'`, [partnerId]);
-      return rows.map((r) => r.email as string);
+      const ids: string[] = [];
+      for (const r of rows) {
+        ids.push(await this.outbox.mail(tx, `kyc.${decision}`, {
+          to: r.email as string,
+          subject: decision === 'approved' ? 'Your Vittora KYC is approved' : 'Your Vittora KYC needs changes',
+          text: decision === 'approved'
+            ? 'You can now create loan cases.'
+            : 'Sign in to see which documents need replacing, then submit again.',
+        }));
+      }
+      return ids;
     });
-    for (const to of admins) {
-      this.mailer.send({
-        to,
-        subject: decision === 'approved' ? 'Your Vittora KYC is approved' : 'Your Vittora KYC needs changes',
-        text: decision === 'approved'
-          ? 'You can now create loan cases.'
-          : 'Sign in to see which documents need replacing, then submit again.',
-      }).catch(() => undefined);
-    }
+    await this.outbox.deliver(admins);
   }
 }

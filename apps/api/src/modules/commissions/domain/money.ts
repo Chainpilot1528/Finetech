@@ -1,7 +1,9 @@
+import { Money } from '@vittora/shared-kernel';
+
 /** All money is integer paise. Percentages are basis points. No floats touch an amount (§4.7). */
 export function applyBps(paise: bigint, bps: number): bigint {
-  // Round half up: add half of the divisor before the integer divide.
-  return (paise * BigInt(bps) + 5_000n) / 10_000n;
+  // Round half up, in the shared Money type (ARCH-06).
+  return Money.applyBps(Money.paise(paise), bps);
 }
 
 export interface Breakdown {

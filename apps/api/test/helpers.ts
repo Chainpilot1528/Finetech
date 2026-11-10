@@ -49,6 +49,7 @@ export async function harness(): Promise<Harness> {
     ENCRYPTION_KEY: randomBytes(32).toString('base64'),
     HMAC_KEY: randomBytes(32).toString('hex'),
     DEV_MAILBOX: 'false',
+    OUTBOX_POLL_MS: '0',
   });
   const app = await createApp(config, {
     clock,
@@ -187,7 +188,10 @@ export async function makeCase(h: Harness, c: Client, lenderId: string, over: { 
   await new Promise((r) => setImmediate(r));
   const link = h.mail.messages.find((m) => m.subject.includes('confirm your loan'))!;
   const token = /\/consent\/([\w-]+)/.exec(link.text)![1];
-  await (await client(h, 'customer-phone')).post(`/public/consent/${token}`);
+  const customer = await client(h, 'customer-phone');
+  await customer.post(`/public/consent/${token}/code`);
+  const code = /\b(\d{6})\b/.exec(h.mail.messages[0]!.text)![1];
+  await customer.post(`/public/consent/${token}`, { code });
   const res = await c.post(`/cases/drafts/${draft.id}/submit`, { confirmDuplicate: true }).set('idempotency-key', uuid());
   if (res.status !== 201) throw new Error(`submit failed: ${JSON.stringify(res.body)}`);
   return { id: res.body.id as string, caseNo: res.body.caseNo as string, registration: `MH12AB${n}` };

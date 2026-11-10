@@ -13,6 +13,7 @@ import { type Principal, type RequestMeta, can } from '../../identity/index.js';
 import { NotificationsService } from '../../notifications/index.js';
 import { BUCKETS, OPEN_STATUSES, STAGES, assertTransition, nextStatuses } from '../domain/lifecycle.js';
 import { csvCell, maskEmail, maskName, maskPhone } from '../domain/masking.js';
+import { revealDetails } from './case-data.js';
 import { type CaseRow, moveCase } from './move-case.js';
 
 const EXPORT_LIMIT = 5000;
@@ -202,7 +203,7 @@ export class TrackingService {
         loanAmountPaise: Number(c.loan_amount_paise), tenureMonths: c.tenure_months, purpose: c.purpose,
         sanctionedAmountPaise: c.sanctioned_amount_paise === null ? null : Number(c.sanctioned_amount_paise),
         sanctionedRoiBps: c.sanctioned_roi_bps, sanctionedTenureMonths: c.sanctioned_tenure_months,
-        loggedBy: owner.rows[0].name as string, createdAt: c.created_at, updatedAt: c.updated_at, details: c.product_details,
+        loggedBy: owner.rows[0].name as string, createdAt: c.created_at, updatedAt: c.updated_at, details: revealDetails(this.config.ENCRYPTION_KEY, c),
         applicant: { name: maskName(this.open(applicant.full_name_enc)), city: applicant.city, state: applicant.state, ...(await this.contact(tx, p, applicant)) },
         history: history.rows,
         notes: notes.rows.map((n) => ({ id: n.id, author: n.author, at: n.at, body: this.open(n.body_enc) })),
@@ -229,7 +230,7 @@ export class TrackingService {
       await writeAudit(tx, { actorId: p.userId, partnerId: ctx.partnerId, action: 'case.transitioned', entity: 'case', entityId: id, after: { from: c.status, to: input.to }, ip: meta.ip, userAgent: meta.userAgent });
       return this.notifications.caseChanged(tx, { partnerId: ctx.partnerId, caseId: id, caseNo: c.case_no, ownerId: c.owner_user_id, status: input.to, actorId: p.userId });
     });
-    this.notifications.send(mail);
+    await this.notifications.send(mail);
     return { status: input.to };
   }
 
@@ -251,6 +252,8 @@ export class TrackingService {
 
   async upload(p: Principal, ctx: TenantContext, id: string, file: UploadedFile | undefined, meta: RequestMeta) {
     const clean = await prepareUpload(file, this.scanner, `cases/${ctx.partnerId}/${id}`);
+    // The file is written before the transaction and removed if it rolls back (BUG-02).
+    await this.store.put(clean.objectKey, clean.data);
     await this.db.withTenant(ctx, async (tx) => {
       const c = await this.load(tx, p, id, true);
       if (!OPEN_STATUSES.includes(c.status)) throw new DomainError('CASE_CLOSED', 409, 'This case no longer accepts documents.');
@@ -260,8 +263,10 @@ export class TrackingService {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [docId, ctx.partnerId, c.source_draft_id, id, `additional-${docId.slice(-8)}`, clean.objectKey, clean.fileName, clean.mime, clean.sha256, p.userId, this.clock.now()],
       );
-      await this.store.put(clean.objectKey, clean.data);
       await writeAudit(tx, { actorId: p.userId, partnerId: ctx.partnerId, action: 'case.document_uploaded', entity: 'case', entityId: id, ip: meta.ip, userAgent: meta.userAgent });
+    }).catch(async (err) => {
+      await this.store.remove(clean.objectKey);
+      throw err;
     });
   }
 

@@ -1,3 +1,4 @@
+import { readPage } from '../../../platform/paging.js';
 import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { REGISTRATION_PRODUCTS } from '@vittora/product-schemas';
@@ -156,20 +157,20 @@ export class OpsPartnersController {
 
   @Requires('partners.view')
   @Get('partners')
-  async list(@Query('kycStatus') kycStatus?: string) {
-    return { data: await this.ops.list(kycStatus || undefined) };
+  list(@Req() req: AuthedRequest, @Query() q: { kycStatus?: string; limit?: string; cursor?: string }) {
+    return this.ops.list(principalOf(req), metaOf(req), readPage(q, 100), q.kycStatus || undefined);
   }
 
   @Requires('partners.view')
   @Get('partners/:id')
-  get(@Param('id') id: string) {
-    return this.ops.get(checkId(id));
+  get(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.ops.get(principalOf(req), checkId(id), metaOf(req));
   }
 
   @Requires('kyc.review')
   @Get('kyc/documents/:id/url')
-  documentUrl(@Param('id') id: string) {
-    return this.ops.documentLink(checkId(id));
+  documentUrl(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.ops.documentLink(principalOf(req), checkId(id), metaOf(req));
   }
 
   @Requires('kyc.review')

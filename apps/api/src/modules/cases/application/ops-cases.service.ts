@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PRODUCTS } from '@vittora/product-schemas';
-import { type Clock, DomainError } from '@vittora/shared-kernel';
+import { type Clock, DomainError, Money } from '@vittora/shared-kernel';
 import { v7 as uuid } from 'uuid';
 import type { Config } from '../../../platform/config.js';
 import { decrypt } from '../../../platform/crypto.js';
@@ -12,6 +12,7 @@ import { CommissionsService } from '../../commissions/application/commissions.se
 import type { Principal, RequestMeta } from '../../identity/index.js';
 import { NotificationsService } from '../../notifications/index.js';
 import { assertTransition, nextStatuses } from '../domain/lifecycle.js';
+import { revealDetails } from './case-data.js';
 import { type CaseRow, moveCase } from './move-case.js';
 
 export interface OpsTransition {
@@ -80,7 +81,7 @@ export class OpsCasesService {
     });
   }
 
-  detail(id: string) {
+  detail(p: Principal, id: string, meta: RequestMeta) {
     return this.db.withOps(async (tx) => {
       const { rows } = await tx.query(
         `SELECT c.*, pa.channel_name AS partner, a.city, a.state, a.pincode, u.name AS assignee
@@ -90,6 +91,8 @@ export class OpsCasesService {
       );
       const c = rows[0];
       if (!c) throw new DomainError('NOT_FOUND', 404, 'Case not found.');
+      // Staff reads of case data are audited (SEC-02).
+      await writeAudit(tx, { actorId: p.userId, partnerId: c.partner_id, action: 'ops.case_viewed', entity: 'case', entityId: id, ip: meta.ip, userAgent: meta.userAgent });
       const history = await tx.query(
         `SELECT h.id, h.from_status AS "fromStatus", h.to_status AS "toStatus", u.name AS actor, h.reason_code AS "reasonCode", h.note, h.at
          FROM case_status_history h JOIN app_user u ON u.id = h.actor_id WHERE h.case_id = $1 ORDER BY h.at, h.id`,
@@ -121,7 +124,7 @@ export class OpsCasesService {
         lenderId: c.lender_id ?? c.preferred_lender_id, lenders: lenders.rows,
         sanctionedAmountPaise: c.sanctioned_amount_paise === null ? null : Number(c.sanctioned_amount_paise),
         location: { city: c.city, state: c.state, pincode: c.pincode },
-        details: c.product_details, history: history.rows, documents: documents.rows, disbursals: disbursals.rows,
+        details: revealDetails(this.config.ENCRYPTION_KEY, c), history: history.rows, documents: documents.rows, disbursals: disbursals.rows,
         notes: notes.rows.map((n) => ({ id: n.id, author: n.author, at: n.at, body: decrypt(this.config.ENCRYPTION_KEY, n.body_enc) })),
         reversal: reversal.rows[0] ?? null,
         allowedTransitions: nextStatuses(c.status, 'ops', c.relook_from),
@@ -203,7 +206,7 @@ export class OpsCasesService {
           if (!input.sanctionedAmount || !input.roiBps || !input.tenureMonths) throw bad('SANCTION_REQUIRED', 'Enter the sanctioned amount, rate and tenure.');
           Object.assign(move, {
             set: 'sanctioned_amount_paise = $5, sanctioned_roi_bps = $6, sanctioned_tenure_months = $7',
-            values: [BigInt(input.sanctionedAmount) * 100n, input.roiBps, input.tenureMonths],
+            values: [Money.fromRupees(input.sanctionedAmount), input.roiBps, input.tenureMonths],
           });
           break;
         case 'CUSTOMER_APPROVED': {
@@ -230,7 +233,7 @@ export class OpsCasesService {
       await writeAudit(tx, { actorId: p.userId, partnerId: c.partner_id, action: 'case.transitioned', entity: 'case', entityId: id, after: { from: c.status, to: input.to }, ip: meta.ip, userAgent: meta.userAgent });
       return this.changed(tx, c, input.to, p.userId);
     });
-    this.notifications.send(mail);
+    await this.notifications.send(mail);
     return { status: input.to };
   }
 
@@ -243,7 +246,7 @@ export class OpsCasesService {
       this.checkVersion(c, version);
       if (c.status !== 'DISBURSAL_IN_PROGRESS') throw new DomainError('INVALID_TRANSITION', 409, 'This case is not being disbursed.');
       const sofar = await tx.query('SELECT COALESCE(sum(amount_paise), 0)::text AS paid, count(*)::int AS n FROM disbursal WHERE case_id = $1', [id]);
-      const amount = BigInt(input.amount) * 100n;
+      const amount = Money.fromRupees(input.amount);
       if (BigInt(sofar.rows[0].paid) + amount > BigInt(c.sanctioned_amount_paise)) {
         throw bad('OVER_SANCTIONED', 'This is more than the amount left to disburse.');
       }
@@ -265,7 +268,7 @@ export class OpsCasesService {
       await writeAudit(tx, { actorId: p.userId, partnerId: c.partner_id, action: 'case.disbursal_recorded', entity: 'case', entityId: id, after: { tranche, final: input.isFinal }, ip: meta.ip, userAgent: meta.userAgent });
       return { id: disbursalId, trancheNo: tranche, invoiceStatus: invoice.status, mail: await this.changed(tx, c, input.isFinal ? 'DISBURSED' : c.status, p.userId) };
     });
-    this.notifications.send(mail);
+    await this.notifications.send(mail);
     return result;
   }
 
@@ -299,7 +302,7 @@ export class OpsCasesService {
       await this.commissions.onCaseReversed(tx, c, p.userId, r.reason_code);
       return this.changed(tx, c, 'REVERSED', p.userId);
     });
-    this.notifications.send(mail);
+    await this.notifications.send(mail);
   }
 
   documentLink(p: Principal, id: string, docId: string, meta: RequestMeta) {

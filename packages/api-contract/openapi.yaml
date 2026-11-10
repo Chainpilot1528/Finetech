@@ -113,9 +113,10 @@ components:
       properties: { url: { type: string } }
     Draft:
       type: object
-      required: [id, version, status, data, documents, requiredDocuments, consent]
+      required: [id, version, status, data, documents, requiredDocuments, consent, referenceId]
       properties:
         id: { type: string, format: uuid }
+        referenceId: { type: string, description: "The partner's Reference ID, shown in the wizard header (§4.4)" }
         version: { type: integer }
         status: { type: string }
         data: { type: object, additionalProperties: true }
@@ -645,6 +646,9 @@ paths:
     get:
       operationId: listUsers
       x-access: users.manage
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
       responses:
         '200':
           description: Users in the caller's organisation
@@ -652,8 +656,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, nextCursor]
                 properties:
+                  nextCursor: { type: [string, 'null'] }
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/User' }
@@ -807,6 +812,8 @@ paths:
       operationId: opsListPartners
       x-access: partners.view
       parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
         - { name: kycStatus, in: query, schema: { type: string } }
       responses:
         '200':
@@ -815,8 +822,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, nextCursor]
                 properties:
+                  nextCursor: { type: [string, 'null'] }
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/OpsPartner' }
@@ -900,6 +908,7 @@ paths:
       x-access: case.create
       parameters:
         - { name: product, in: query, required: true, schema: { type: string } }
+        - { name: loanType, in: query, required: false, schema: { type: string } }
       responses:
         '200':
           description: Lenders offering the product
@@ -929,6 +938,9 @@ paths:
     get:
       operationId: listDrafts
       x-access: case.create
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
       responses:
         '200':
           description: Your open drafts
@@ -936,8 +948,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, nextCursor]
                 properties:
+                  nextCursor: { type: [string, 'null'] }
                   data:
                     type: array
                     items: { type: object, required: [id], properties: { id: { type: string }, product: { type: [string, 'null'] }, updatedAt: { type: string } } }
@@ -1031,12 +1044,32 @@ paths:
         default: { $ref: '#/components/responses/Error' }
     post:
       operationId: giveConsent
+      description: Needs the one-time code sent to the customer's phone (SEC-01).
+      x-access: public
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '204':
+          description: Recorded
+        default: { $ref: '#/components/responses/Error' }
+  /public/consent/{token}/code:
+    post:
+      operationId: sendConsentCode
+      description: Sends a one-time code to the phone the consent link went to.
       x-access: public
       parameters:
         - { name: token, in: path, required: true, schema: { type: string } }
       responses:
-        '204':
-          description: Recorded
+        '202':
+          description: Sent
         default: { $ref: '#/components/responses/Error' }
   /dashboard/summary:
     get:

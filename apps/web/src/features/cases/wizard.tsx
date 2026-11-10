@@ -32,16 +32,24 @@ export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { id:
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
   const [duplicate, setDuplicate] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  // The version this screen was built from. Saves send it, so edits made in another tab or on another
+  // device are never silently overwritten (BUG-01). Background refreshes don't move it.
+  const [baseVersion, setBaseVersion] = useState<number | null>(null);
 
   useEffect(() => {
-    if (draft.data && !data) setData(draft.data.data as DraftData);
+    if (draft.data && !data) {
+      setData(draft.data.data as DraftData);
+      setBaseVersion(draft.data.version);
+    }
   }, [draft.data, data]);
 
   const productCode = data?.setup?.product ?? '';
+  const loanType = data?.setup?.loanType ?? '';
   const lenders = useQuery({
-    queryKey: ['lenders', productCode],
+    queryKey: ['lenders', productCode, loanType],
     enabled: !!productCode,
-    queryFn: () => unwrap(api.GET('/lenders', { params: { query: { product: productCode } } })),
+    queryFn: () => unwrap(api.GET('/lenders', { params: { query: { product: productCode, ...(loanType ? { loanType } : {}) } } })),
   });
 
   if (!draft.data || !data) return <Skeleton className="h-96" />;
@@ -61,16 +69,20 @@ export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { id:
     setBusy('save');
     setMessage('');
     try {
-      const latest = await unwrap(api.GET('/cases/drafts/{id}', { params: { path: { id: draftId } } }));
       const saved = await unwrap(api.PATCH('/cases/drafts/{id}', {
         params: { path: { id: draftId } },
-        body: { version: latest.version, data: { [current]: data![current] } },
+        body: { version: baseVersion!, data: { [current]: data![current] } },
       }));
       queries.setQueryData(['draft', draftId], saved);
+      setBaseVersion(saved.version);
       setData(saved.data as DraftData);
       setErrors({});
       return true;
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'VERSION_CONFLICT') {
+        setConflict(true);
+        return false;
+      }
       setMessage((err as Error).message);
       if (err instanceof ApiError) setErrors(err.fields);
       return false;
@@ -145,6 +157,8 @@ export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { id:
   const income = data.income ?? {};
   const collateralValue = product?.valueField ? Number(data.details?.[product.valueField]) : 0;
   const ltv = collateralValue > 0 && loan.amount ? ltvPercent(loan.amount, collateralValue) : null;
+  // The warning level comes from the product definition (GAP-04).
+  const ltvWarn = product?.limits.warnLtvPercent ?? 85;
   const foir = loan.amount && loan.tenureMonths && income.monthlyIncome
     ? foirPercent(income.existingEmi ?? 0, estimatedEmi(loan.amount, loan.tenureMonths), income.monthlyIncome)
     : null;
@@ -157,7 +171,10 @@ export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { id:
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <h1 className="text-2xl font-bold tracking-tight">{w.title}</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-2xl font-bold tracking-tight">{w.title}</h1>
+        <p className="text-sm text-muted" data-testid="reference-id">{w.referenceId}: <span className="font-mono text-ink">{draft.data.referenceId}</span></p>
+      </div>
       <ol className="flex gap-1" aria-label="Progress">
         {w.steps.map((label, i) => (
           <li key={label} aria-current={i === step ? 'step' : undefined} className="flex-1">
@@ -168,6 +185,16 @@ export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { id:
       </ol>
       <p className="text-sm font-semibold sm:hidden">{step + 1}. {w.steps[step]}</p>
       {message && <Alert>{message}</Alert>}
+      {conflict && (
+        <Alert>
+          {w.conflict}{' '}
+          <button type="button" className="font-semibold underline" onClick={async () => {
+            const fresh = await draft.refetch();
+            if (fresh.data) { setData(fresh.data.data as DraftData); setBaseVersion(fresh.data.version); }
+            setConflict(false);
+          }}>{w.conflictReload}</button>
+        </Alert>
+      )}
 
       <section className="space-y-4 rounded-xl border border-line bg-white p-5">
         {current === 'setup' && (
@@ -253,7 +280,7 @@ export function Wizard({ draftId, onDone }: { draftId: string; onDone: (c: { id:
             <Field label={w.amount} inputMode="numeric" value={shown(loan.amount)} error={errors.amount} onChange={(e) => set('loan', 'amount', numberOrUndefined(e.target.value))} />
             <Field label={w.tenure} inputMode="numeric" value={shown(loan.tenureMonths)} error={errors.tenureMonths} onChange={(e) => set('loan', 'tenureMonths', numberOrUndefined(e.target.value))} />
             <Field label={w.purpose} value={shown(loan.purpose)} onChange={(e) => set('loan', 'purpose', e.target.value)} />
-            {ltv !== null && <Alert tone={ltv > 85 ? 'error' : 'info'}>{w.ltv}: {ltv}%{ltv > 85 ? `. ${w.ltvHigh}` : ''}</Alert>}
+            {ltv !== null && <Alert tone={ltv > ltvWarn ? 'error' : 'info'}>{w.ltv}: {ltv}%{ltv > ltvWarn ? `. ${w.ltvHigh}` : ''}</Alert>}
           </>
         )}
 

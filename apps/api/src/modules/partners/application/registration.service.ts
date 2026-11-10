@@ -6,7 +6,8 @@ import { hmac } from '../../../platform/crypto.js';
 import type { Db, Tx } from '../../../platform/db.js';
 import { CLOCK, CONFIG, DB } from '../../../platform/tokens.js';
 import { writeAudit } from '../../audit/index.js';
-import { AuthService, MAILER, type Mailer, type RequestMeta } from '../../identity/index.js';
+import { Outbox } from '../../../platform/outbox.js';
+import { AuthService, type RequestMeta } from '../../identity/index.js';
 
 export interface Registration {
   channelName: string;
@@ -30,7 +31,7 @@ export class RegistrationService {
     @Inject(DB) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(CONFIG) private readonly config: Config,
-    @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(Outbox) private readonly outbox: Outbox,
     @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
@@ -45,7 +46,7 @@ export class RegistrationService {
     const now = this.clock.now();
     const ipKey = hmac(this.config.HMAC_KEY, `register:${meta.ip}`);
 
-    const mail = await this.db.withAuth(async (tx) => {
+    const queued = await this.db.withAuth(async (tx) => {
       const { rows } = await tx.query(
         'SELECT count(*)::int AS n FROM login_attempt WHERE email_hash = $1 AND at > $2',
         [ipKey, new Date(now.getTime() - 60_000)],
@@ -57,11 +58,11 @@ export class RegistrationService {
 
       const taken = await tx.query('SELECT 1 FROM app_user WHERE lower(email) = lower($1)', [input.adminEmail]);
       if (taken.rowCount) {
-        return {
+        return this.outbox.mail(tx, 'partner.register_taken', {
           to: input.adminEmail,
           subject: 'You already have a Vittora account',
           text: 'Someone tried to register with this email. If that was you, sign in or reset your password.',
-        };
+        });
       }
 
       const partnerId = uuid();
@@ -85,12 +86,12 @@ export class RegistrationService {
         actorId: adminId, partnerId, action: 'partner.registered', entity: 'partner', entityId: partnerId,
         ip: meta.ip, userAgent: meta.userAgent,
       });
-      return {
+      return this.outbox.mail(tx, 'partner.welcome', {
         to: input.adminEmail,
         subject: 'Welcome to Vittora: set up your password',
         text: `Your Reference ID is ${refCode}. Keep it for support calls.\n\nSet your password within 30 minutes. If this link expires, use Forgot password.\n\n${link}`,
-      };
+      });
     });
-    this.mailer.send(mail).catch(() => undefined);
+    await this.outbox.deliver([queued]);
   }
 }

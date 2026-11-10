@@ -1,3 +1,4 @@
+import { productName } from '@vittora/product-schemas';
 import { Inject, Injectable } from '@nestjs/common';
 import { type Clock, DomainError } from '@vittora/shared-kernel';
 import type { Config } from '../../../platform/config.js';
@@ -43,7 +44,7 @@ export class SettingsService {
                 business_email AS "businessEmail", business_phone AS "businessPhone", status, kyc_status AS "kycStatus",
                 mask_customer_contact AS "maskCustomerContact", created_at AS "registeredAt" FROM partner`,
       )).rows[0];
-      const products = await tx.query(`SELECT p.code, p.name FROM partner_product pp JOIN product p ON p.code = pp.product_code ORDER BY p.name`);
+      const products = await tx.query(`SELECT pp.product_code AS code FROM partner_product pp ORDER BY pp.product_code`);
       const admins = await tx.query(`SELECT name, email, phone FROM app_user WHERE role = 'admin' AND status = 'active' ORDER BY created_at LIMIT 5`);
       const me = await tx.query(`SELECT last_login_at AS "lastLoginAt" FROM app_user WHERE id = $1`, [p.userId]);
       const billing = await tx.query(
@@ -51,7 +52,7 @@ export class SettingsService {
                 ifsc, bank_name AS "bankName", branch, verification_status AS "verificationStatus", reviewer_note AS "reviewerNote"
          FROM partner_billing`,
       );
-      return { ...partner, products: products.rows, admins: admins.rows, lastLoginAt: me.rows[0]?.lastLoginAt ?? null, billing: billing.rows[0] ?? null };
+      return { ...partner, products: products.rows.map((r) => ({ code: r.code as string, name: productName(r.code) })).sort((a, b) => a.name.localeCompare(b.name)), admins: admins.rows, lastLoginAt: me.rows[0]?.lastLoginAt ?? null, billing: billing.rows[0] ?? null };
     });
   }
 

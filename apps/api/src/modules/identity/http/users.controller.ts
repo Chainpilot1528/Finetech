@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Req } from '@nestjs/common';
+import { readPage } from '../../../platform/paging.js';
+import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Req, Query } from '@nestjs/common';
 import { PARTNER_ROLES } from '@vittora/shared-kernel';
 import { z } from 'zod';
 import { checkId } from '../../../platform/request.js';
@@ -20,8 +21,8 @@ export class UsersController {
 
   @Requires('users.manage')
   @Get()
-  async list(@Req() req: AuthedRequest) {
-    return { data: await this.users.list(tenantOf(req)) };
+  list(@Req() req: AuthedRequest, @Query() q: { limit?: string; cursor?: string }) {
+    return this.users.list(tenantOf(req), readPage(q, 100));
   }
 
   @Requires('users.manage')

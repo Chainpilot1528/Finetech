@@ -3,8 +3,9 @@ import { type Clock } from '@vittora/shared-kernel';
 import { v7 as uuid } from 'uuid';
 import { z } from 'zod';
 import type { Db, TenantContext, Tx } from '../../platform/db.js';
+import { Outbox, type Pending } from '../../platform/outbox.js';
 import { CLOCK, DB } from '../../platform/tokens.js';
-import { type AuthedRequest, MAILER, type MailMessage, type Mailer, type Principal, Requires, parse, principalOf, tenantOf } from '../identity/index.js';
+import { type AuthedRequest, type Principal, Requires, parse, principalOf, tenantOf } from '../identity/index.js';
 
 export const EVENTS = ['approval', 'rejection', 'pending_documentation', 'new_case', 'any_status'] as const;
 export type NotificationEvent = (typeof EVENTS)[number];
@@ -48,14 +49,15 @@ export class NotificationsService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
-    @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(Outbox) private readonly outbox: Outbox,
   ) {}
 
   /**
    * Writes in-app rows in the caller's transaction, so a notification exists only if the change does.
-   * Returns the emails to send once that transaction has committed. Payloads hold ids and codes only.
+   * Emails go to the outbox in the same transaction; pass the returned ids to `send` after commit.
+   * Payloads hold ids and codes only.
    */
-  async caseChanged(tx: Tx, c: CaseChange): Promise<MailMessage[]> {
+  async caseChanged(tx: Tx, c: CaseChange): Promise<Pending> {
     const { rows } = await tx.query(
       `SELECT u.id, u.email, n.prefs FROM app_user u LEFT JOIN notification_pref n ON n.user_id = u.id
        WHERE u.partner_id = $1 AND u.status = 'active' AND u.id <> $3 AND (u.id = $2 OR u.role IN ('admin','manager'))`,
@@ -64,7 +66,7 @@ export class NotificationsService {
     const events = eventsFor(c.status);
     const label = LABELS[c.status] ?? c.status;
     const now = this.clock.now();
-    const mail: MailMessage[] = [];
+    const mail: Pending = [];
     for (const user of rows) {
       const prefs = merge(user.prefs);
       if (events.some((e) => prefs[e].inApp)) {
@@ -74,14 +76,15 @@ export class NotificationsService {
         );
       }
       if (events.some((e) => prefs[e].email)) {
-        mail.push({ to: user.email, subject: `Case ${c.caseNo}: ${label}`, text: `Case ${c.caseNo} is now ${label}. Sign in to Vittora to see the details.` });
+        mail.push(await this.outbox.mail(tx, `case.${c.status.toLowerCase()}`, { to: user.email, subject: `Case ${c.caseNo}: ${label}`, text: `Case ${c.caseNo} is now ${label}. Sign in to Vittora to see the details.` }));
       }
     }
     return mail;
   }
 
-  send(mail: MailMessage[]) {
-    for (const m of mail) this.mailer.send(m).catch(() => undefined);
+  /** First delivery attempt once the change has committed; the outbox retries anything that fails. */
+  send(mail: Pending) {
+    return this.outbox.deliver(mail);
   }
 
   list(p: Principal, ctx: TenantContext) {

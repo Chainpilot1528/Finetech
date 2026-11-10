@@ -24,3 +24,45 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm --filter @vittora/web build
+
+  # Browser tests against a production build of the web app (DX-05). Every secret here is random and
+  # made fresh for this run by `pnpm setup:env`; nothing real is used.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 30
+    env:
+      E2E_TIMEOUT_MS: '90000'
+      E2E_EXPECT_MS: '10000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm contract:gen
+      - run: pnpm setup:env
+      - name: Start the database
+        run: |
+          nohup pnpm db > db.log 2>&1 &
+          for i in $(seq 1 60); do grep -q 'Database ready' db.log && break; sleep 2; done
+          grep 'Database ready' db.log || { cat db.log; exit 1; }
+      - run: pnpm seed
+      - run: pnpm --filter @vittora/web build
+      - name: Start the API and the web app
+        run: |
+          (cd apps/api && nohup pnpm start > ../../api.log 2>&1 &)
+          (cd apps/web && nohup pnpm exec next start -H 127.0.0.1 -p 3000 > ../../web.log 2>&1 &)
+          for i in $(seq 1 60); do curl -fs http://127.0.0.1:4000/readyz && curl -fs -o /dev/null http://127.0.0.1:3000/signin && break; sleep 2; done
+          curl -fs http://127.0.0.1:4000/readyz || { cat api.log web.log; exit 1; }
+      - run: pnpm e2e
+      - if: failure()
+        run: tail -n 200 api.log web.log db.log
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7

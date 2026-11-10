@@ -141,8 +141,8 @@ export class OpsCasesController {
 
   @Requires('ops.cases')
   @Get('cases/:id')
-  detail(@Param('id') id: string) {
-    return this.ops.detail(checkId(id));
+  detail(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.ops.detail(principalOf(req), checkId(id), metaOf(req));
   }
 
   @Requires('ops.assign')

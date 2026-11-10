@@ -1,0 +1,29 @@
+{
+  "_comment": "Every product Vittora knows, in display order. A product is offered in the wizard only once it has a definition file; the database records only whether it is switched on (ARCH-03).",
+  "products": [
+    {
+      "code": "used_car",
+      "definition": "used_car.v1.json"
+    },
+    {
+      "code": "loan_against_car",
+      "definition": "loan_against_car.v1.json"
+    },
+    {
+      "code": "personal",
+      "definition": "personal.v1.json"
+    },
+    {
+      "code": "business",
+      "name": "Business Loan"
+    },
+    {
+      "code": "home",
+      "name": "Home Loan"
+    },
+    {
+      "code": "education",
+      "name": "Education Loan"
+    }
+  ]
+}

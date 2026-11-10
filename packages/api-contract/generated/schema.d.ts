@@ -557,7 +557,25 @@ export interface paths {
         };
         get: operations["getConsentPage"];
         put?: never;
+        /** @description Needs the one-time code sent to the customer's phone (SEC-01). */
         post: operations["giveConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/consent/{token}/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sends a one-time code to the phone the consent link went to. */
+        post: operations["sendConsentCode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1376,6 +1394,8 @@ export interface components {
         Draft: {
             /** Format: uuid */
             id: string;
+            /** @description The partner's Reference ID, shown in the wizard header (§4.4) */
+            referenceId: string;
             version: number;
             status: string;
             data: {
@@ -2011,7 +2031,10 @@ export interface operations {
     };
     listUsers: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2025,6 +2048,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        nextCursor: string | null;
                         data: components["schemas"]["User"][];
                     };
                 };
@@ -2297,6 +2321,8 @@ export interface operations {
     opsListPartners: {
         parameters: {
             query?: {
+                limit?: number;
+                cursor?: string;
                 kycStatus?: string;
             };
             header?: never;
@@ -2312,6 +2338,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        nextCursor: string | null;
                         data: components["schemas"]["OpsPartner"][];
                     };
                 };
@@ -2449,6 +2476,7 @@ export interface operations {
         parameters: {
             query: {
                 product: string;
+                loanType?: string;
             };
             header?: never;
             path?: never;
@@ -2476,7 +2504,10 @@ export interface operations {
     };
     listDrafts: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2490,6 +2521,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        nextCursor: string | null;
                         data: {
                             id: string;
                             product?: string | null;
@@ -2687,10 +2719,37 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    code?: string;
+                };
+            };
+        };
         responses: {
             /** @description Recorded */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    sendConsentCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sent */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

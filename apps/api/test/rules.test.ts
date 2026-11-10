@@ -66,4 +66,15 @@ describe('platform safety', () => {
     // Local file storage, the dev scanner and the dev inbox must never reach real customers.
     expect(() => loadConfig(production)).toThrow(/object storage/);
   });
+  it('only allows the dev mailbox on a loopback address (SEC-04)', () => {
+    const dev = {
+      WEB_ORIGIN: 'http://localhost:3000', APP_DATABASE_URL: 'a', AUTH_DATABASE_URL: 'b',
+      OPS_DATABASE_URL: 'c', ENCRYPTION_KEY: key, HMAC_KEY: 'k'.repeat(32), DEV_MAILBOX: 'true',
+    };
+    expect(loadConfig(dev).API_HOST).toBe('127.0.0.1');
+    expect(() => loadConfig({ ...dev, API_HOST: '0.0.0.0' })).toThrow(/DEV_MAILBOX/);
+    expect(() => loadConfig({ ...dev, API_HOST: '192.168.1.20' })).toThrow(/DEV_MAILBOX/);
+    expect(loadConfig({ ...dev, API_HOST: '::1' }).API_HOST).toBe('::1');
+    expect(loadConfig({ ...dev, API_HOST: '0.0.0.0', DEV_MAILBOX: 'false' }).API_HOST).toBe('0.0.0.0');
+  });
 });

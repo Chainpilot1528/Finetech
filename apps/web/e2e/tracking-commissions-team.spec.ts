@@ -60,9 +60,13 @@ async function createCase(page: Page, name: string) {
     });
   }
   await page.request.post(`/api/v1/cases/drafts/${draft.id}/consent-requests`, { headers });
-  await expect.poll(async () => (await inbox(page)).some((m) => m.to === email)).toBe(true);
-  const link = /\/consent\/([\w-]+)/.exec((await inbox(page)).find((m) => m.to === email)!.text)![1];
-  await page.request.post(`/api/v1/public/consent/${link}`, { headers });
+  const phone = `sms:+9198765${n}1`;
+  const consentMail = async () => (await inbox(page)).find((m) => m.to === phone && /\/consent\//.test(m.text));
+  await expect.poll(async () => !!(await consentMail())).toBe(true);
+  const link = /\/consent\/([\w-]+)/.exec((await consentMail())!.text)![1];
+  await page.request.post(`/api/v1/public/consent/${link}/code`, { headers });
+  const code = /\b(\d{6})\b/.exec((await inbox(page)).find((m) => m.to === phone && m.subject === 'Your consent code')!.text)![1];
+  await page.request.post(`/api/v1/public/consent/${link}`, { headers, data: { code } });
   const made = await (await page.request.post(`/api/v1/cases/drafts/${draft.id}/submit`, { headers: { ...headers, 'idempotency-key': `e2e-${Date.now()}` }, data: {} })).json();
   return { id: made.id as string, caseNo: made.caseNo as string, registration: `MH12AB${n}`, phoneTail: `${n}1`.slice(-4) };
 }
@@ -75,7 +79,7 @@ async function opsMove(page: Page, to: string, fill: () => Promise<void> = async
 }
 
 test('a case runs from creation to paid commission, across partner and staff screens', async ({ page, browser }) => {
-  test.setTimeout(180_000);
+  test.slow();
   await signIn(page, find('admin'));
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   const c = await createCase(page, 'Meera Nair');
@@ -197,7 +201,7 @@ test('a case runs from creation to paid commission, across partner and staff scr
 });
 
 test('an Admin invites a teammate, who joins and is then deactivated', async ({ page, browser }) => {
-  test.setTimeout(120_000);
+  test.slow();
   await signIn(page, find('manager'));
   await expect(page.getByRole('link', { name: 'Users' })).toBeHidden();
   await page.getByRole('button', { name: 'Sign out' }).click();

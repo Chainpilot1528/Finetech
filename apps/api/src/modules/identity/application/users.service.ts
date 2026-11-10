@@ -5,7 +5,9 @@ import type { Config } from '../../../platform/config.js';
 import { randomToken, sha256 } from '../../../platform/crypto.js';
 import type { Db, TenantContext, Tx } from '../../../platform/db.js';
 import { writeAudit } from '../../audit/index.js';
-import { CLOCK, CONFIG, DB, MAILER, type Mailer } from '../ports/index.js';
+import { Outbox } from '../../../platform/outbox.js';
+import { type Page, afterClause, limitParam, toPage } from '../../../platform/paging.js';
+import { CLOCK, CONFIG, DB } from '../ports/index.js';
 import type { Principal, RequestMeta } from './auth.service.js';
 
 const COLUMNS = `id, name, email, phone, role, status, mfa_enabled AS "mfaEnabled",
@@ -23,13 +25,16 @@ export class UsersService {
     @Inject(DB) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(CONFIG) private readonly config: Config,
-    @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(Outbox) private readonly outbox: Outbox,
   ) {}
 
-  list(ctx: TenantContext) {
+  list(ctx: TenantContext, page: Page) {
     return this.db.withTenant(ctx, async (tx) => {
-      const { rows } = await tx.query(`SELECT ${COLUMNS} FROM app_user ORDER BY created_at, id LIMIT 100`);
-      return rows;
+      const params: unknown[] = [];
+      const after = afterClause(page, 'created_at', 'id', params);
+      const limit = limitParam(page, params);
+      const { rows } = await tx.query(`SELECT ${COLUMNS}, created_at::text AS _sort FROM app_user WHERE ${after} ORDER BY created_at, id LIMIT ${limit}`, params);
+      return toPage(rows, page);
     });
   }
 
@@ -64,14 +69,14 @@ export class UsersService {
     return `${this.config.WEB_ORIGIN}/reset-password?token=${token}`;
   }
 
-  private sendInvite(to: string, link: string) {
-    this.mailer.send({ to, subject: 'You have been invited to Vittora', text: `Set your password to join your team. The link works once and expires in 7 days.\n\n${link}` }).catch(() => undefined);
+  private queueInvite(tx: Tx, to: string, link: string) {
+    return this.outbox.mail(tx, 'user.invite', { to, subject: 'You have been invited to Vittora', text: `Set your password to join your team. The link works once and expires in 7 days.\n\n${link}` });
   }
 
   /** The Admin never sets a password. The person chooses their own through the link (§4.9). */
   async invite(p: Principal, ctx: TenantContext, input: { name: string; email: string; phone?: string; role: PartnerRole }, meta: RequestMeta) {
     const id = uuid();
-    const link = await this.db.withTenant(ctx, async (tx) => {
+    const queued = await this.db.withTenant(ctx, async (tx) => {
       try {
         await tx.query(
           `INSERT INTO app_user (id, partner_id, name, email, phone, role, status, created_by) VALUES ($1,$2,$3,$4,$5,$6,'invited',$7)`,
@@ -82,21 +87,21 @@ export class UsersService {
         throw err;
       }
       await writeAudit(tx, { actorId: p.userId, partnerId: ctx.partnerId, action: 'user.invited', entity: 'user', entityId: id, after: { role: input.role }, ip: meta.ip, userAgent: meta.userAgent });
-      return this.setupToken(tx, id);
+      return this.queueInvite(tx, input.email, await this.setupToken(tx, id));
     });
-    this.sendInvite(input.email, link);
+    await this.outbox.deliver([queued]);
     return this.get(ctx, id);
   }
 
   async resendInvite(p: Principal, ctx: TenantContext, id: string, meta: RequestMeta) {
-    const { link, email } = await this.db.withTenant(ctx, async (tx) => {
+    const queued = await this.db.withTenant(ctx, async (tx) => {
       const { rows } = await tx.query('SELECT email FROM app_user WHERE id = $1', [id]);
       if (!rows[0]) throw notFound();
       const issued = await this.setupToken(tx, id);
       await writeAudit(tx, { actorId: p.userId, partnerId: ctx.partnerId, action: 'user.invite_resent', entity: 'user', entityId: id, ip: meta.ip, userAgent: meta.userAgent });
-      return { link: issued, email: rows[0].email as string };
+      return this.queueInvite(tx, rows[0].email as string, issued);
     });
-    this.sendInvite(email, link);
+    await this.outbox.deliver([queued]);
   }
 
   async update(p: Principal, ctx: TenantContext, id: string, input: { name?: string; phone?: string | null; role?: PartnerRole }, meta: RequestMeta) {

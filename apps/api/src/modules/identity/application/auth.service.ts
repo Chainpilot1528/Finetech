@@ -8,13 +8,14 @@ import { v7 as uuid } from 'uuid';
 import type { Config } from '../../../platform/config.js';
 import { decrypt, encrypt, hmac, randomToken, sha256 } from '../../../platform/crypto.js';
 import type { Db, Tx } from '../../../platform/db.js';
+import { Outbox, type Pending } from '../../../platform/outbox.js';
 import { writeAudit } from '../../audit/index.js';
 import * as repo from '../adapters/identity.repository.js';
 import type { MfaState } from '../adapters/identity.repository.js';
 import { type Features, requiresMfa } from '../domain/permissions.js';
 import * as rules from '../domain/rules.js';
 import {
-  BREACHED_PASSWORDS, type BreachedPasswordChecker, CLOCK, CONFIG, DB, DELAY, type Delay, MAILER, type Mailer,
+  BREACHED_PASSWORDS, type BreachedPasswordChecker, CLOCK, CONFIG, DB, DELAY, type Delay,
   type MailMessage,
 } from '../ports/index.js';
 
@@ -45,22 +46,27 @@ export class AuthService {
     @Inject(DB) private readonly db: Db,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(CONFIG) private readonly config: Config,
-    @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(BREACHED_PASSWORDS) private readonly breached: BreachedPasswordChecker,
     @Inject(DELAY) private readonly delay: Delay,
+    @Inject(Outbox) private readonly outbox: Outbox,
   ) {}
 
   private emailKey(email: string, scope = 'login') {
     return hmac(this.config.HMAC_KEY, `${scope}:${email.trim().toLowerCase()}`);
   }
 
-  /** Mail problems must never break sign-in or reveal whether an account exists. */
-  private deliver(messages: MailMessage[]) {
-    for (const m of messages) {
-      this.mailer.send(m).catch((err) => {
-        console.error(JSON.stringify({ level: 'error', event: 'mail_failed', error: String(err?.code ?? 'unknown') }));
-      });
-    }
+  /** Queues mail in the caller's transaction, so it goes only if the change commits (ARCH-02). */
+  private async queue(tx: Tx, topic: string, messages: MailMessage[]): Promise<Pending> {
+    const ids: Pending = [];
+    for (const m of messages) ids.push(await this.outbox.mail(tx, topic, m));
+    return ids;
+  }
+
+  /** Mail problems must never break sign-in or reveal whether an account exists; the outbox retries. */
+  private async deliver(topic: string, messages: MailMessage[]) {
+    if (!messages.length) return;
+    const ids = await this.db.withAuth((tx) => this.queue(tx, topic, messages));
+    await this.outbox.deliver(ids);
   }
 
   async login(
@@ -116,7 +122,7 @@ export class AuthService {
     });
 
     if (!device.isFirstEver && !device.isKnown) {
-      this.deliver([{
+      await this.deliver('auth.new_device', [{
         to: user.email,
         subject: 'New sign-in to your Vittora account',
         text: 'Your account was just signed in from a new device. If this was not you, reset your password now.',
@@ -142,7 +148,7 @@ export class AuthService {
       const admins = user.partnerId ? await repo.findPartnerAdminEmails(tx, user.partnerId) : [];
       return [...new Set([user.email, ...admins])];
     });
-    this.deliver(notify.map((to) => ({
+    await this.deliver('auth.account_locked', notify.map((to) => ({
       to,
       subject: 'A Vittora account was locked',
       text: 'After too many failed sign-ins, an account in your organisation is locked for 30 minutes.',
@@ -199,27 +205,26 @@ export class AuthService {
     const now = this.clock.now();
     const key = this.emailKey(email, 'forgot');
     const token = randomToken();
-    const mail = await this.db.withAuth(async (tx) => {
+    const queued = await this.db.withAuth(async (tx): Promise<Pending> => {
       const recent = await repo.countRecentAttempts(tx, key, meta.ip, new Date(now.getTime() - rules.MINUTE));
-      if (recent >= rules.AUTH_RATE_LIMIT_PER_MINUTE) return null;
+      if (recent >= rules.AUTH_RATE_LIMIT_PER_MINUTE) return [];
       await repo.recordAttempt(tx, key, meta.ip, false, now);
       const user = await repo.findUserByEmail(tx, email);
-      if (!user || user.status === 'inactive' || user.partnerId === null) return null;
+      if (!user || user.status === 'inactive' || user.partnerId === null) return [];
       const purpose = user.status === 'invited' ? 'password_setup' : 'password_reset';
       await repo.replaceToken(tx, {
         id: uuid(), userId: user.id, purpose, tokenHash: sha256(token),
         expiresAt: new Date(now.getTime() + rules.LINK_TTL_MS), now,
       });
       await writeAudit(tx, { actorId: user.id, partnerId: user.partnerId, action: `auth.${purpose}_requested`, entity: 'user', entityId: user.id, ip: meta.ip, userAgent: meta.userAgent });
-      return { to: user.email, purpose };
+      const setup = purpose === 'password_setup';
+      return this.queue(tx, `auth.${purpose}`, [{
+        to: user.email,
+        subject: setup ? 'Set up your Vittora password' : 'Reset your Vittora password',
+        text: `Open this link within 30 minutes. It works once.\n\n${this.config.WEB_ORIGIN}/reset-password?token=${token}`,
+      }]);
     });
-    if (!mail) return;
-    const setup = mail.purpose === 'password_setup';
-    this.deliver([{
-      to: mail.to,
-      subject: setup ? 'Set up your Vittora password' : 'Reset your Vittora password',
-      text: `Open this link within 30 minutes. It works once.\n\n${this.config.WEB_ORIGIN}/reset-password?token=${token}`,
-    }]);
+    await this.outbox.deliver(queued);
   }
 
   private async assertPasswordAllowed(password: string, email: string) {
@@ -266,12 +271,13 @@ export class AuthService {
     }
     await this.assertPasswordAllowed(next, user.email);
     const passwordHash = await argonHash(next);
-    await this.db.withAuth(async (tx) => {
+    const queued = await this.db.withAuth(async (tx) => {
       await tx.query('UPDATE app_user SET password_hash = $2 WHERE id = $1', [user.id, passwordHash]);
       await repo.revokeSessions(tx, user.id, now, p.sessionHash);
       await writeAudit(tx, { actorId: user.id, partnerId: user.partnerId, action: 'auth.password_changed', entity: 'user', entityId: user.id, ip: meta.ip, userAgent: meta.userAgent });
+      return this.queue(tx, 'auth.password_changed', [{ to: user.email, subject: 'Your Vittora password was changed', text: 'If this was not you, reset your password now.' }]);
     });
-    this.deliver([{ to: user.email, subject: 'Your Vittora password was changed', text: 'If this was not you, reset your password now.' }]);
+    await this.outbox.deliver(queued);
   }
 
   private totp() {
@@ -319,16 +325,16 @@ export class AuthService {
     if (p.mfaState !== 'pending') throw new DomainError('MFA_NOT_PENDING', 409, 'No code is needed right now.');
     const now = this.clock.now();
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-    const user = await this.db.withAuth(async (tx) => {
+    const queued = await this.db.withAuth(async (tx) => {
       const u = await repo.findUserById(tx, p.userId);
       if (!u) throw invalidCredentials();
       await repo.replaceToken(tx, {
         id: uuid(), userId: u.id, purpose: 'email_otp', tokenHash: this.otpHash(u.id, code),
         expiresAt: new Date(now.getTime() + rules.EMAIL_OTP_TTL_MS), now,
       });
-      return u;
+      return this.queue(tx, 'auth.email_otp', [{ to: u.email, subject: 'Your Vittora sign-in code', text: `Your code is ${code}. It expires in 10 minutes.` }]);
     });
-    this.deliver([{ to: user.email, subject: 'Your Vittora sign-in code', text: `Your code is ${code}. It expires in 10 minutes.` }]);
+    await this.outbox.deliver(queued);
   }
 
   async verifyMfa(p: Principal, code: string, meta: RequestMeta): Promise<void> {

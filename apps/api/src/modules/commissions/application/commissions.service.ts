@@ -7,6 +7,7 @@ import type { Db, TenantContext, Tx } from '../../../platform/db.js';
 import { CLOCK, CONFIG, DB } from '../../../platform/tokens.js';
 import { writeAudit } from '../../audit/index.js';
 import { maskName } from '../../cases/domain/masking.js';
+import { standingOf } from '../../partners/index.js';
 import type { Principal, RequestMeta } from '../../identity/index.js';
 import { breakdown, financialYear, invoiceNumber } from '../domain/money.js';
 
@@ -167,16 +168,13 @@ export class CommissionsService {
          FROM invoice_event e LEFT JOIN app_user u ON u.id = e.actor_id WHERE e.invoice_id = $1 ORDER BY e.at, e.id`,
         [id],
       );
-      const billing = await tx.query(
-        `SELECT verification_status AS status FROM partner_billing`,
-      );
-      const partner = await tx.query('SELECT kyc_status, legal_name AS "legalName" FROM partner');
+      const partner = await tx.query('SELECT legal_name AS "legalName" FROM partner');
       return {
         ...invoice,
         applicant: maskName(decrypt(this.config.ENCRYPTION_KEY, name)),
         events: events.rows,
         legalName: partner.rows[0].legalName as string,
-        canRaise: partner.rows[0].kyc_status === 'approved' && billing.rows[0]?.status === 'verified',
+        canRaise: (await standingOf(tx)).mayInvoice,
       };
     });
   }
@@ -194,10 +192,10 @@ export class CommissionsService {
     return this.db.withTenant(ctx, async (tx) => {
       const inv = await this.lock(tx, id, version);
       if (inv.status !== 'DRAFT') throw new DomainError('INVALID_TRANSITION', 409, 'Only a draft invoice can be raised.');
-      const partner = await tx.query('SELECT kyc_status, legal_name FROM partner');
+      const partner = await tx.query('SELECT legal_name FROM partner');
       const { rows } = await tx.query('SELECT * FROM partner_billing');
       const billing = rows[0];
-      if (partner.rows[0].kyc_status !== 'approved' || billing?.verification_status !== 'verified') {
+      if (!(await standingOf(tx)).mayInvoice) {
         throw new DomainError('BILLING_NOT_VERIFIED', 403, 'Your KYC and your bank and GST details must be verified before you can raise an invoice.');
       }
       // GST registration can change after the draft was priced, so settle it now, at the rate on the draft.

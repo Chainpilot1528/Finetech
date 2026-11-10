@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { type Clock, DomainError } from '@vittora/shared-kernel';
+import { type Clock, DomainError, Money } from '@vittora/shared-kernel';
 import { v7 as uuid } from 'uuid';
 import type { Db, Tx } from '../../../platform/db.js';
 import { CLOCK, DB } from '../../../platform/tokens.js';
@@ -155,8 +155,8 @@ export class OpsFinanceService {
       await tx.query(
         `INSERT INTO rate_card (id, lender_id, product, loan_type, slab_min_paise, slab_max_paise, pct_bps, clawback_months, valid_from, valid_to, created_by, created_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [id, input.lenderId, input.product, input.loanType ?? null, BigInt(input.slabMin) * 100n,
-         input.slabMax === undefined ? null : BigInt(input.slabMax) * 100n, input.pctBps, input.clawbackMonths, input.validFrom, input.validTo ?? null, p.userId, this.clock.now()],
+        [id, input.lenderId, input.product, input.loanType ?? null, Money.fromRupees(input.slabMin),
+         input.slabMax === undefined ? null : Money.fromRupees(input.slabMax), input.pctBps, input.clawbackMonths, input.validFrom, input.validTo ?? null, p.userId, this.clock.now()],
       );
       await writeAudit(tx, { actorId: p.userId, action: 'rate_card.created', entity: 'rate_card', entityId: id, after: { pctBps: input.pctBps }, ip: meta.ip, userAgent: meta.userAgent });
       return { id, status: 'pending' };

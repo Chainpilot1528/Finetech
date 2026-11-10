@@ -77,8 +77,10 @@ test('an invited user sets a first password from the emailed link', async ({ pag
   await page.getByRole('button', { name: 'Send link' }).click();
   await expect(page.getByRole('status')).toContainText('on its way');
 
-  await page.goto('/dev/inbox');
-  await page.getByRole('link', { name: /reset-password/ }).first().click();
+  // Read the mail from the API, not the /dev/inbox page, so this also runs against a production build (DX-04).
+  await expect.poll(async () => (await inbox(page)).some((m) => m.to === 'invited@alpha.test' && /reset-password/.test(m.text))).toBe(true);
+  const mail = (await inbox(page)).find((m) => m.to === 'invited@alpha.test' && /reset-password/.test(m.text))!;
+  await page.goto(/https?:\/\/\S+/.exec(mail.text)![0]);
   const password = `e2e-${Date.now()}-Secret`;
   await page.getByLabel('New password', { exact: true }).fill(password);
   await page.getByLabel('Confirm new password').fill(password);

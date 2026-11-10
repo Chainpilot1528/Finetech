@@ -17,6 +17,13 @@ weight until the tester signs it off.
 | 7. Remaining products | 13% | 0% | Not started |
 | 8. Launch prep | 10% | 0% | Not started |
 
+## Review fixes (9 November 2026)
+
+All findings from the 9 November review are fixed or have a logged decision in `docs/DECISIONS.md`
+(see its fix log). They don't change the percentage: they make Parts 1 to 6 safer, not bigger.
+Checked: 1,002 API tests, 18 browser tests, lint, typecheck and a production build all pass.
+Still waiting on the product owner: D-018 (and with it BUG-04), D-021 and D-025.
+
 ## Differences from the plan
 - Sessions and sign-in limits use Postgres, not Redis (ADR 0004)
 - CAPTCHA is not built yet because no provider is chosen
