@@ -48,9 +48,11 @@ async function save(c: Client, id: string, version: number, data: object) {
 async function consent(c: Client, id: string) {
   expect((await c.post(`/cases/drafts/${id}/consent-requests`)).status).toBe(202);
   await new Promise((r) => setImmediate(r));
-  const token = consentToken(h.mail.messages[0]!.text);
+  const token = consentToken(h.mail.messages.find((m) => /\/consent\//.test(m.text))!.text);
   const customer = await client(h, 'customer-phone');
-  expect((await customer.post(`/public/consent/${token}`)).status).toBe(204);
+  expect((await customer.post(`/public/consent/${token}/code`)).status).toBe(202);
+  const code = /\b(\d{6})\b/.exec(h.mail.messages[0]!.text)![1];
+  expect((await customer.post(`/public/consent/${token}`, { code })).status).toBe(204);
   return token;
 }
 
@@ -191,6 +193,85 @@ describe('drafts (§4.4)', () => {
   });
 });
 
+describe('draft edits are audited (STD-05)', () => {
+  it('records which sections changed, never their values', async () => {
+    const d = await newDraft(exec);
+    await save(exec, d.id, d.version, usedCarData(lender, { pan: 'AUDIT1234Z' }));
+    const { rows } = await h.db.query(`SELECT after FROM audit_log WHERE action = 'case.draft_updated' AND entity_id = $1`, [d.id]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].after.sections).toBe('setup,applicant,details,loan,income,documents');
+    const text = JSON.stringify(rows);
+    expect(text).not.toContain('AUDIT1234Z');
+    expect(text).not.toContain('Ravi');
+    expect(text).not.toContain('9876543210');
+  });
+
+  it('includes the partner Reference ID with the draft', async () => {
+    const d = await newDraft(exec);
+    expect((await exec.get(`/cases/drafts/${d.id}`)).body.referenceId).toMatch(/^TST-110-/);
+  });
+});
+
+describe('customer consent only comes from the customer (SEC-01)', () => {
+  const linkMessages = () => h.mail.messages.filter((m) => /\/consent\//.test(m.text));
+
+  it('sends the link only to the customer\'s phone, never to an email the partner typed', async () => {
+    const d = await newDraft(exec);
+    const partnerEmail = `partner-own-${randomUUID()}@example.test`;
+    await save(exec, d.id, d.version, usedCarData(lender, { email: partnerEmail }));
+    h.mail.messages.length = 0;
+    expect((await exec.post(`/cases/drafts/${d.id}/consent-requests`)).status).toBe(202);
+    const sent = linkMessages();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.to).toBe('sms:+919876543210');
+    expect(h.mail.messages.some((m) => m.to === partnerEmail)).toBe(false);
+  });
+
+  it('needs the one-time code sent to that phone, and records it as an OTP consent', async () => {
+    const d = await newDraft(exec);
+    await save(exec, d.id, d.version, usedCarData(lender));
+    await exec.post(`/cases/drafts/${d.id}/consent-requests`);
+    const token = consentToken(linkMessages()[0]!.text);
+    const customer = await client(h, 'customer-phone');
+    expect((await customer.post(`/public/consent/${token}`)).status).toBe(422);
+    h.mail.messages.length = 0;
+    expect((await customer.post(`/public/consent/${token}/code`)).status).toBe(202);
+    const sms = h.mail.messages[0]!;
+    expect(sms.to).toBe('sms:+919876543210');
+    const code = /\b(\d{6})\b/.exec(sms.text)![1]!;
+    const wrong = code === '000000' ? '111111' : '000000';
+    expect((await customer.post(`/public/consent/${token}`, { code: wrong })).status).toBe(400);
+    expect((await exec.get(`/cases/drafts/${d.id}`)).body.consent).toBe('sent');
+    expect((await customer.post(`/public/consent/${token}`, { code })).status).toBe(204);
+    const { rows } = await h.db.query('SELECT channel FROM customer_consent WHERE draft_id = $1 AND consented_at IS NOT NULL', [d.id]);
+    expect(rows[0].channel).toBe('otp');
+    expect((await exec.get(`/cases/drafts/${d.id}`)).body.consent).toBe('given');
+  });
+
+  it('stops accepting codes after five wrong tries', async () => {
+    const d = await newDraft(exec);
+    await save(exec, d.id, d.version, usedCarData(lender));
+    await exec.post(`/cases/drafts/${d.id}/consent-requests`);
+    const token = consentToken(linkMessages()[0]!.text);
+    const customer = await client(h, 'customer-phone');
+    h.mail.messages.length = 0;
+    await customer.post(`/public/consent/${token}/code`);
+    const code = /\b(\d{6})\b/.exec(h.mail.messages[0]!.text)![1]!;
+    const wrong = code === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 5; i += 1) expect((await customer.post(`/public/consent/${token}`, { code: wrong })).status).toBe(400);
+    const locked = await customer.post(`/public/consent/${token}`, { code });
+    expect(locked.status).toBe(400);
+    expect(locked.body.code).toBe('CODE_LOCKED');
+  });
+
+  it('is voided when the customer\'s email changes after consent', async () => {
+    const saved = await readyDraft(exec);
+    const version = (await exec.get(`/cases/drafts/${saved.id}`)).body.version;
+    await save(exec, saved.id, version, { applicant: { email: `changed-${randomUUID()}@example.test` } });
+    expect((await exec.get(`/cases/drafts/${saved.id}`)).body.consent).toBe('none');
+  });
+});
+
 describe('customer consent (§4.4)', () => {
   it('blocks submission until the customer consents, and only the customer can', async () => {
     const d = await newDraft(exec);
@@ -223,7 +304,7 @@ describe('customer consent (§4.4)', () => {
     await consent(exec, d.id);
     const { rows } = await h.db.query('SELECT consented_at, user_agent, channel FROM customer_consent WHERE draft_id = $1', [d.id]);
     expect(rows[0].consented_at).toBeTruthy();
-    expect(rows[0].channel).toBe('link');
+    expect(rows[0].channel).toBe('otp');
     expect(rows[0].user_agent).toBe('customer-phone');
     expect((await exec.get(`/cases/drafts/${d.id}`)).body.consent).toBe('given');
   });

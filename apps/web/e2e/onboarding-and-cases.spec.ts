@@ -24,7 +24,7 @@ async function enrol(page: Page) {
 }
 
 test('a new partner registers, completes KYC, and staff approve it', async ({ page, browser }) => {
-  test.setTimeout(120_000);
+  test.slow();
   const stamp = Date.now();
   const email = `owner-${stamp}@newco.test`;
   await page.goto('/signin');
@@ -104,7 +104,7 @@ test('a new partner registers, completes KYC, and staff approve it', async ({ pa
 });
 
 test('an Executive creates a case end to end, with the customer consenting on their own page', async ({ page, browser }) => {
-  test.setTimeout(120_000);
+  test.slow();
   await signIn(page, find('executive'));
   await page.getByRole('link', { name: 'Create Case' }).click();
   await page.getByRole('button', { name: 'Start a new case' }).click();
@@ -170,7 +170,9 @@ test('an Executive creates a case end to end, with the customer consenting on th
   await page.getByRole('button', { name: 'Send consent link' }).click();
   await expect(page.getByTestId('consent-status')).toContainText('Waiting for the customer');
 
-  const mail = (await inbox(page)).find((m) => m.to === customerEmail)!;
+  // The link goes to the customer's phone only, never to the email typed in the wizard (SEC-01).
+  const mail = (await inbox(page)).find((m) => m.to === 'sms:+919876543210' && /\/consent\//.test(m.text))!;
+  expect((await inbox(page)).some((m) => m.to === customerEmail)).toBe(false);
   const customerContext = await browser.newContext();
   const customer = await customerContext.newPage();
   await customer.setViewportSize({ width: 375, height: 800 });
@@ -178,11 +180,15 @@ test('an Executive creates a case end to end, with the customer consenting on th
   await expect(customer.getByText('Alpha Motors')).toBeVisible();
   await expect(customer.getByText('Test Bank One')).toBeVisible();
   await expect(customer.getByText('Ravi Test')).toHaveCount(0);
+  await customer.getByRole('button', { name: 'Text me a code' }).click();
+  await expect(customer.getByText('Code sent')).toBeVisible();
+  const code = /\b(\d{6})\b/.exec((await inbox(page)).find((m) => m.subject === 'Your consent code')!.text)![1]!;
+  await customer.getByLabel('6-digit code').fill(code);
   await customer.getByRole('button', { name: 'I agree' }).click();
   await expect(customer.getByRole('status')).toContainText('recorded');
   await customerContext.close();
 
-  await expect(page.getByTestId('consent-status')).toContainText('has given consent', { timeout: 15_000 });
+  await expect(page.getByTestId('consent-status')).toContainText('has given consent', { timeout: 3 * Number(process.env.E2E_EXPECT_MS ?? 5_000) });
   await page.getByRole('button', { name: 'Create case' }).click();
   await expect(page.getByTestId('case-no')).toHaveText(/^CASE-\d{6}-[A-Z2-9]{6}$/);
 });
@@ -199,6 +205,37 @@ test('a saved draft can be resumed after leaving', async ({ page }) => {
   await page.reload();
   await page.getByRole('button', { name: 'Continue' }).first().click();
   await expect(page.getByRole('radio', { name: 'Personal Loan', exact: true })).toBeChecked();
+});
+
+test('a draft open in two tabs never silently overwrites the other (BUG-01)', async ({ page, context }) => {
+  await signIn(page, find('executive'));
+  await page.getByRole('link', { name: 'Create Case' }).click();
+  await page.getByRole('button', { name: 'Start a new case' }).click();
+  await expect(page.getByTestId('reference-id')).toContainText(/[A-Z]+-\d{3}-\d+/);
+  await page.getByLabel('Personal Loan').check();
+  await page.getByLabel(/^Fresh/).check();
+  await page.getByLabel('Preferred bank or NBFC').selectOption({ label: 'Test Bank Two' });
+  await page.getByRole('button', { name: 'Next step' }).click();
+  await expect(page.getByLabel('Mobile number')).toBeVisible();
+
+  const second = await context.newPage();
+  await second.goto(page.url());
+  await second.getByRole('button', { name: 'Continue' }).first().click();
+  await expect(second.getByRole('radio', { name: 'Personal Loan', exact: true })).toBeChecked();
+
+  // The first tab changes the loan type and saves.
+  await page.getByRole('button', { name: 'Previous' }).click();
+  await page.getByLabel(/^BT/).check();
+  await page.getByRole('button', { name: 'Next step' }).click();
+  await expect(page.getByLabel('Mobile number')).toBeVisible();
+
+  // The second tab, still on the old version, is stopped instead of overwriting it.
+  await second.getByLabel(/^Top-Up/).check();
+  await second.getByRole('button', { name: 'Next step' }).click();
+  await expect(second.getByText('changed in another tab')).toBeVisible();
+  await second.getByRole('button', { name: 'Load the latest version' }).click();
+  await expect(second.getByLabel(/^BT/)).toBeChecked();
+  await second.close();
 });
 
 test('the wizard fits a phone', async ({ page }) => {

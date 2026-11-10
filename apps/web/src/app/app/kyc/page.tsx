@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { kycDocumentsReady } from '@vittora/product-schemas';
 import { useState } from 'react';
 import { api, unwrap, uploadFile } from '@/shared/api';
 import { t } from '@/shared/messages';
@@ -41,8 +42,7 @@ export default function KycPage() {
   if (kyc.isError) return <ErrorState onRetry={() => kyc.refetch()} />;
   const k = kyc.data;
   const locked = k.status === 'submitted' || k.status === 'approved';
-  const ready = k.agreementAccepted && k.required.every((type) => k.documents.some((d) => d.type === type && d.status !== 'rejected'))
-    && !k.documents.some((d) => d.status === 'rejected');
+  const ready = k.agreementAccepted && kycDocumentsReady(k.documents);
 
   return (
     <div className="max-w-2xl space-y-5">

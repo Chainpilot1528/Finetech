@@ -6,6 +6,7 @@ import { type Capability, can, capabilitiesFor, requiresMfa } from '../src/modul
 const EXPECTED: Record<Capability, [admin: boolean, manager: boolean, executive: boolean, viewer: boolean]> = {
   'dashboard.view': [true, true, true, true],
   'case.create': [true, true, true, false],
+  'case.view': [true, true, true, true],
   'case.view_all': [true, true, false, true],
   'case.view_own': [false, false, true, false],
   'case.note': [true, true, true, false],
@@ -24,6 +25,9 @@ const EXPECTED: Record<Capability, [admin: boolean, manager: boolean, executive:
   'kyc.manage': [true, false, false, false],
   'kyc.review': [false, false, false, false],
   'partners.view': [false, false, false, false],
+  'ops.cases': [false, false, false, false],
+  'ops.assign': [false, false, false, false],
+  'finance.manage': [false, false, false, false],
 };
 
 describe('role matrix (§7.1)', () => {
@@ -43,7 +47,7 @@ describe('role matrix (§7.1)', () => {
   });
 
   it('gives internal roles nothing on the partner side', () => {
-    expect(capabilitiesFor('super_admin', inhouse)).toEqual(['kyc.review', 'partners.view']);
+    expect(capabilitiesFor('super_admin', inhouse)).toEqual(['kyc.review', 'partners.view', 'ops.cases', 'ops.assign', 'finance.manage']);
     expect(can('finance', 'kyc.review')).toBe(false);
   });
 

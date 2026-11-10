@@ -15,7 +15,7 @@ export default function CreateCasePage() {
   const { data: me } = useMe();
   const approved = me?.partner?.kycStatus === 'approved';
   const [draftId, setDraftId] = useState('');
-  const [created, setCreated] = useState('');
+  const [created, setCreated] = useState<{ id: string; caseNo: string }>();
   const drafts = useQuery({ queryKey: ['drafts'], enabled: approved, queryFn: () => unwrap(api.GET('/cases/drafts')) });
   const start = useMutation({
     mutationFn: () => unwrap(api.POST('/cases/drafts', { params: { header: { 'Idempotency-Key': crypto.randomUUID() } } })),
@@ -35,16 +35,17 @@ export default function CreateCasePage() {
     return (
       <div className="mx-auto max-w-md rounded-xl border border-line bg-white p-8 text-center">
         <h1 className="text-xl font-bold">{w.doneTitle}</h1>
-        <p className="mt-3 font-mono text-lg" data-testid="case-no">{created}</p>
+        <p className="mt-3 font-mono text-lg" data-testid="case-no">{created.caseNo}</p>
         <p className="mt-2 text-sm text-muted">{w.doneBody}</p>
         <div className="mt-5 flex flex-col gap-2">
-          <Button onClick={() => { setCreated(''); setDraftId(''); void drafts.refetch(); }}>{w.another}</Button>
+          <Button onClick={() => { setCreated(undefined); setDraftId(''); void drafts.refetch(); }}>{w.another}</Button>
+          <Link className="text-sm font-medium text-brand hover:underline" href={`/app/cases/${created.id}`}>{w.viewCase}</Link>
           <Link className="text-sm font-medium text-brand hover:underline" href="/app/dashboard">{w.dashboard}</Link>
         </div>
       </div>
     );
   }
-  if (draftId) return <Wizard key={draftId} draftId={draftId} onDone={(c) => setCreated(c.caseNo)} />;
+  if (draftId) return <Wizard key={draftId} draftId={draftId} onDone={setCreated} />;
   if (drafts.isPending) return <Skeleton className="h-64" />;
   if (drafts.isError) return <ErrorState onRetry={() => drafts.refetch()} />;
 

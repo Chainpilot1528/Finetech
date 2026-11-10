@@ -1,19 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AGREEMENT_TEXT, AGREEMENT_VERSION } from '@vittora/product-schemas';
+import { AGREEMENT_TEXT, AGREEMENT_VERSION, type KycType, REQUIRED_KYC, kycDocumentsReady } from '@vittora/product-schemas';
 import { type Clock, DomainError } from '@vittora/shared-kernel';
 import { v7 as uuid } from 'uuid';
 import type { Config } from '../../../platform/config.js';
 import { sha256 } from '../../../platform/crypto.js';
 import type { Db, TenantContext, Tx } from '../../../platform/db.js';
+import { Outbox } from '../../../platform/outbox.js';
 import { type DocumentStore, type Scanner, type UploadedFile, prepareUpload, signFileLink } from '../../../platform/storage.js';
 import { CLOCK, CONFIG, DB, DOCUMENT_STORE, SCANNER } from '../../../platform/tokens.js';
 import { writeAudit } from '../../audit/index.js';
 import type { Principal, RequestMeta } from '../../identity/index.js';
 
-export const KYC_TYPES = ['pan', 'gst_certificate', 'address_proof', 'bank_details'] as const;
-export type KycType = (typeof KYC_TYPES)[number];
-/** The GST certificate applies only to GST-registered partners, so it isn't compulsory here. */
-export const REQUIRED_KYC: KycType[] = ['pan', 'address_proof', 'bank_details'];
+export { KYC_TYPES, type KycType, REQUIRED_KYC } from '@vittora/product-schemas';
 
 const DOC_COLUMNS = `id, type, file_name AS "fileName", status, reviewer_note AS "reviewerNote", submitted_at AS "submittedAt"`;
 
@@ -25,6 +23,7 @@ export class KycService {
     @Inject(CONFIG) private readonly config: Config,
     @Inject(DOCUMENT_STORE) private readonly store: DocumentStore,
     @Inject(SCANNER) private readonly scanner: Scanner,
+    @Inject(Outbox) private readonly outbox: Outbox,
   ) {}
 
   private async agreementAccepted(tx: Tx) {
@@ -64,7 +63,9 @@ export class KycService {
 
   async upload(p: Principal, ctx: TenantContext, type: KycType, file: UploadedFile | undefined, meta: RequestMeta) {
     const clean = await prepareUpload(file, this.scanner, `kyc/${ctx.partnerId}`);
-    const replaced = await this.db.withTenant(ctx, async (tx) => {
+    // The file is written before the transaction and removed if it rolls back (BUG-02).
+    await this.store.put(clean.objectKey, clean.data);
+    const queued = await this.db.withTenant(ctx, async (tx) => {
       const { rows } = await tx.query('SELECT kyc_status FROM partner');
       if (['submitted', 'approved'].includes(rows[0].kyc_status)) {
         throw new DomainError('KYC_LOCKED', 409, 'Your KYC is under review or already approved.');
@@ -79,11 +80,14 @@ export class KycService {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [uuid(), ctx.partnerId, type, clean.objectKey, clean.fileName, clean.mime, clean.sha256, this.clock.now()],
       );
-      await this.store.put(clean.objectKey, clean.data);
       await writeAudit(tx, { actorId: p.userId, partnerId: ctx.partnerId, action: 'kyc.document_uploaded', entity: 'kyc_document', after: { type }, ip: meta.ip, userAgent: meta.userAgent });
-      return old.rows[0]?.object_key as string | undefined;
+      const replaced = old.rows[0]?.object_key as string | undefined;
+      return replaced ? [await this.outbox.deleteObject(tx, 'kyc.document_replaced', replaced)] : [];
+    }).catch(async (err) => {
+      await this.store.remove(clean.objectKey);
+      throw err;
     });
-    if (replaced) await this.store.remove(replaced);
+    await this.outbox.deliver(queued);
   }
 
   async submit(p: Principal, ctx: TenantContext, meta: RequestMeta) {
@@ -92,8 +96,7 @@ export class KycService {
         throw new DomainError('AGREEMENT_REQUIRED', 409, 'Please accept the partner agreement first.');
       }
       const { rows } = await tx.query('SELECT type, status FROM kyc_document');
-      const present = new Set(rows.filter((d) => d.status !== 'rejected').map((d) => d.type));
-      if (!REQUIRED_KYC.every((t) => present.has(t)) || rows.some((d) => d.status === 'rejected')) {
+      if (!kycDocumentsReady(rows)) {
         throw new DomainError('KYC_INCOMPLETE', 422, 'Upload every required document first.');
       }
       const moved = await tx.query('SELECT partner_submit_kyc() AS ok');

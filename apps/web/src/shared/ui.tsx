@@ -67,6 +67,72 @@ export function Alert({ tone = 'error', children }: { tone?: 'error' | 'success'
   return <p role={tone === 'error' ? 'alert' : 'status'} className={`rounded-lg border px-3 py-2.5 text-sm ${look}`}>{children}</p>;
 }
 
+const TONES: Record<string, string> = {
+  good: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+  warn: 'bg-amber-50 text-amber-900 ring-amber-200',
+  bad: 'bg-red-50 text-red-800 ring-red-200',
+  plain: 'bg-paper text-ink ring-line',
+};
+const STATUS_TONE: Record<string, string> = {
+  DISBURSED: 'good', PAID: 'good', APPROVED: 'good', CUSTOMER_APPROVED: 'good', active: 'good', verified: 'good', recovered: 'good',
+  RELOOK: 'warn', DISPUTED: 'warn', PENDING_RATE_CARD: 'warn', pending: 'warn', invited: 'warn',
+  REJECTED: 'bad', REVERSED: 'bad', WITHDRAWN: 'bad', VOID: 'bad', rejected: 'bad', inactive: 'bad',
+};
+
+export function Badge({ status, label }: { status: string; label?: string }) {
+  return <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${TONES[STATUS_TONE[status] ?? 'plain']}`}>{label ?? status}</span>;
+}
+
+/** A horizontally scrolling table, so wide data never pushes the page sideways on a phone. */
+export function DataTable({ head, children, min = 720 }: { head: string[]; children: ReactNode; min?: number }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-line bg-white">
+      <table className="w-full text-left text-sm" style={{ minWidth: min }}>
+        <thead className="border-b border-line text-xs uppercase text-muted">
+          <tr>{head.map((h, i) => <th key={`${h}-${i}`} scope="col" className="px-4 py-3 font-semibold">{h}</th>)}</tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+export const Cell = ({ children, strong }: { children?: ReactNode; strong?: boolean }) =>
+  <td className={`px-4 py-3 ${strong ? 'font-medium' : ''}`}>{children}</td>;
+
+export function Card({ title, children, className = '' }: { title?: string; children: ReactNode; className?: string }) {
+  return (
+    <section className={`rounded-xl border border-line bg-white p-5 ${className}`}>
+      {title && <h2 className="mb-3 font-semibold">{title}</h2>}
+      {children}
+    </section>
+  );
+}
+
+export const Empty = ({ children }: { children: ReactNode }) =>
+  <p className="rounded-xl border border-dashed border-line bg-white p-10 text-center text-sm text-muted">{children}</p>;
+
+export function Tabs<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap gap-1">
+      {options.map((o) => (
+        <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)}
+          className={`min-h-9 rounded-lg px-3 py-1.5 text-sm font-medium ${value === o.value ? 'bg-brand/10 text-brand-deep' : 'text-muted hover:text-ink'}`}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+export function TextArea({ label, ...rest }: { label: string } & React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const id = useId();
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-ink">{label}</label>
+      <textarea id={id} rows={3} {...rest} className={`${CONTROL} border-line`} />
+    </div>
+  );
+}
+
 export function Skeleton({ className = 'h-24' }: { className?: string }) {
   return <div aria-hidden className={`animate-pulse rounded-xl bg-line/60 ${className}`} />;
 }

@@ -1,3 +1,4 @@
+import catalogue from '../products/catalogue.json';
 import loanAgainstCar from '../products/loan_against_car.v1.json';
 import personal from '../products/personal.v1.json';
 import usedCar from '../products/used_car.v1.json';
@@ -9,6 +10,8 @@ export interface FieldSchema {
   description?: string;
   enum?: string[];
   'x-labels'?: Record<string, string>;
+  /** Identifies a person or their property. Encrypted at rest and never logged (SEC-03, §9.3). */
+  'x-sensitive'?: boolean;
   minimum?: number;
   maximum?: number;
   minLength?: number;
@@ -32,23 +35,49 @@ export interface Product {
   loanTypes: { code: string; label: string; help: string }[];
   details: { type: 'object'; required: string[]; properties: Record<string, FieldSchema> };
   documents: DocumentRule[];
-  limits: { minAmount: number; maxAmount: number; minTenure: number; maxTenure: number };
+  /** Common documents this product does not ask for (for example salary slips on a business loan). */
+  excludeCommonDocuments?: string[];
+  limits: {
+    minAmount: number;
+    maxAmount: number;
+    minTenure: number;
+    maxTenure: number;
+    /** Secured products: the loan can't be more than this share of the collateral value. */
+    maxLtvPercent?: number;
+    /** The wizard warns above this. */
+    warnLtvPercent?: number;
+    /** Vehicle loans: the vehicle's age when the loan ends, in years (GAP-04). */
+    maxVehicleAgeAtMaturityYears?: number;
+    vehicleYearField?: string;
+  };
 }
 
-export const PRODUCTS: Record<string, Product> = {
-  used_car: usedCar as Product,
-  loan_against_car: loanAgainstCar as Product,
-  personal: personal as Product,
-};
+/**
+ * The product catalogue (ARCH-03). Each product is defined once, in its definition file; everything
+ * else (the wizard, the API's checks, the sign-up list) is derived from here. Adding a product is a
+ * new definition file and one line in catalogue.json.
+ */
+const DEFINITIONS: Record<string, Product> = Object.fromEntries(
+  [usedCar, loanAgainstCar, personal].map((p) => [p.code, p as Product]),
+);
 
-export const REGISTRATION_PRODUCTS = [
-  { code: 'used_car', name: 'Used Car Loan' },
-  { code: 'loan_against_car', name: 'Loan Against Car' },
-  { code: 'personal', name: 'Personal Loan' },
-  { code: 'business', name: 'Business Loan' },
-  { code: 'home', name: 'Home Loan' },
-  { code: 'education', name: 'Education Loan' },
-];
+export const PRODUCTS: Record<string, Product> = Object.fromEntries(
+  catalogue.products.filter((c) => c.definition).map((c) => [c.code, DEFINITIONS[c.code]!]),
+);
+
+/** Every product a partner can say they deal in at sign-up, built or not. */
+export const REGISTRATION_PRODUCTS: { code: string; name: string }[] = catalogue.products.map((c) => ({
+  code: c.code,
+  name: PRODUCTS[c.code]?.name ?? (c as { name?: string }).name ?? c.code,
+}));
+
+/** Display name for any product code. */
+export const productName = (code: string) => REGISTRATION_PRODUCTS.find((p) => p.code === code)?.name ?? code;
+
+/** Detail fields that must be encrypted before they are stored. */
+export function sensitiveFields(product: Product): string[] {
+  return Object.entries(product.details.properties).filter(([, f]) => f['x-sensitive']).map(([k]) => k);
+}
 
 export const EMPLOYMENT_TYPES = ['salaried', 'self_employed', 'business'] as const;
 
@@ -62,7 +91,8 @@ const COMMON_DOCUMENTS: DocumentRule[] = [
 ];
 
 export function documentsFor(product: Product, loanType?: string, employment?: string): DocumentRule[] {
-  return [...COMMON_DOCUMENTS, ...product.documents].filter(
+  const common = COMMON_DOCUMENTS.filter((d) => !product.excludeCommonDocuments?.includes(d.code));
+  return [...common, ...product.documents].filter(
     (d) =>
       (!d.loanTypes || (loanType !== undefined && d.loanTypes.includes(loanType))) &&
       (!d.employment || (employment !== undefined && d.employment.includes(employment))),
@@ -165,6 +195,19 @@ export function validateStep(step: Step, data: DraftData, today: Date): Errors {
     if (!Number.isInteger(tenureMonths) || tenureMonths! < minTenure || tenureMonths! > maxTenure) {
       e.tenureMonths = `Enter ${minTenure} to ${maxTenure} months.`;
     }
+    // Limits from the product definition, checked here so the API enforces them too (GAP-04).
+    const l = product.limits;
+    const value = product.valueField ? Number(data.details?.[product.valueField]) : NaN;
+    if (!e.amount && l.maxLtvPercent && Number.isFinite(value) && value > 0 && ltvPercent(amount!, value) > l.maxLtvPercent) {
+      e.amount = `The loan can't be more than ${l.maxLtvPercent}% of the valuation.`;
+    }
+    const year = l.vehicleYearField ? Number(data.details?.[l.vehicleYearField]) : NaN;
+    if (!e.tenureMonths && l.maxVehicleAgeAtMaturityYears && Number.isInteger(year)) {
+      const ageAtEnd = today.getUTCFullYear() - year + tenureMonths! / 12;
+      if (ageAtEnd > l.maxVehicleAgeAtMaturityYears) {
+        e.tenureMonths = `The car would be over ${l.maxVehicleAgeAtMaturityYears} years old when the loan ends. Choose a shorter tenure.`;
+      }
+    }
   }
 
   if (step === 'income') {
@@ -214,3 +257,15 @@ export const AGREEMENT_TEXT = `DRAFT FOR TESTING ONLY. This text must be replace
 2. You obtain documents lawfully and never store full Aadhaar numbers.
 3. Commission is paid per disbursal, under the rate card in force, and can be clawed back on reversal.
 4. You keep customer data confidential and report any leak immediately.`;
+
+/** Partner KYC documents (§4.2). One rule, used by the KYC page and re-checked by the API (ARCH-05). */
+export const KYC_TYPES = ['pan', 'gst_certificate', 'address_proof', 'bank_details'] as const;
+export type KycType = (typeof KYC_TYPES)[number];
+/** The GST certificate applies only to GST-registered partners, so it isn't compulsory here (see D-015). */
+export const REQUIRED_KYC: KycType[] = ['pan', 'address_proof', 'bank_details'];
+
+/** Every required document is present and none is rejected. */
+export function kycDocumentsReady(docs: { type: string; status: string }[]): boolean {
+  const present = new Set(docs.filter((d) => d.status !== 'rejected').map((d) => d.type));
+  return REQUIRED_KYC.every((t) => present.has(t)) && !docs.some((d) => d.status === 'rejected');
+}

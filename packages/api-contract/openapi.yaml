@@ -113,9 +113,10 @@ components:
       properties: { url: { type: string } }
     Draft:
       type: object
-      required: [id, version, status, data, documents, requiredDocuments, consent]
+      required: [id, version, status, data, documents, requiredDocuments, consent, referenceId]
       properties:
         id: { type: string, format: uuid }
+        referenceId: { type: string, description: "The partner's Reference ID, shown in the wizard header (§4.4)" }
         version: { type: integer }
         status: { type: string }
         data: { type: object, additionalProperties: true }
@@ -139,6 +140,335 @@ components:
         id: { type: string, format: uuid }
         caseNo: { type: string }
         status: { type: string }
+    Pagination:
+      type: object
+      required: [page, limit, totalItems, totalPages]
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        totalItems: { type: integer }
+        totalPages: { type: integer }
+    CaseSummary:
+      type: object
+      required: [id, caseNo, caseType, product, productName, loanType, status, loanAmountPaise, lender, loggedBy, applicant, phone, createdAt, updatedAt, ageHours]
+      properties:
+        id: { type: string }
+        caseNo: { type: string }
+        caseType: { type: string }
+        product: { type: string }
+        productName: { type: string }
+        loanType: { type: string }
+        status: { type: string }
+        loanAmountPaise: { type: number }
+        lender: { type: string }
+        loggedBy: { type: string }
+        applicant: { type: string }
+        phone: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        ageHours: { type: integer }
+    HistoryEntry:
+      type: object
+      required: [id, toStatus, actor, at]
+      properties:
+        id: { type: string }
+        fromStatus: { type: [string, 'null'] }
+        toStatus: { type: string }
+        actor: { type: string }
+        reasonCode: { type: [string, 'null'] }
+        note: { type: [string, 'null'] }
+        at: { type: string }
+    CaseNote:
+      type: object
+      required: [id, author, at, body]
+      properties: { id: { type: string }, author: { type: string }, at: { type: string }, body: { type: string } }
+    CaseFile:
+      type: object
+      required: [id, docType, fileName, at]
+      properties: { id: { type: string }, docType: { type: string }, fileName: { type: string }, at: { type: string } }
+    Disbursal:
+      type: object
+      required: [id, trancheNo, utr, amountPaise, disbursedOn, isFinal]
+      properties:
+        id: { type: string }
+        trancheNo: { type: integer }
+        utr: { type: string }
+        amountPaise: { type: number }
+        disbursedOn: { type: string }
+        isFinal: { type: boolean }
+    CaseDetail:
+      type: object
+      required: [id, caseNo, caseType, status, version, product, productName, loanType, lender, loanAmountPaise, tenureMonths, loggedBy, createdAt, updatedAt, details, applicant, history, notes, documents, disbursals, allowedTransitions, canUpload]
+      properties:
+        id: { type: string }
+        caseNo: { type: string }
+        caseType: { type: string }
+        status: { type: string }
+        version: { type: integer }
+        product: { type: string }
+        productName: { type: string }
+        loanType: { type: string }
+        lender: { type: string }
+        loanAmountPaise: { type: number }
+        tenureMonths: { type: integer }
+        purpose: { type: [string, 'null'] }
+        sanctionedAmountPaise: { type: [number, 'null'] }
+        sanctionedRoiBps: { type: [integer, 'null'] }
+        sanctionedTenureMonths: { type: [integer, 'null'] }
+        loggedBy: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        details: { type: object, additionalProperties: true }
+        applicant:
+          type: object
+          required: [name, city, state, phone, masked]
+          properties:
+            name: { type: string }
+            city: { type: string }
+            state: { type: string }
+            phone: { type: string }
+            email: { type: [string, 'null'] }
+            masked: { type: boolean }
+        history: { type: array, items: { $ref: '#/components/schemas/HistoryEntry' } }
+        notes: { type: array, items: { $ref: '#/components/schemas/CaseNote' } }
+        documents: { type: array, items: { $ref: '#/components/schemas/CaseFile' } }
+        disbursals: { type: array, items: { $ref: '#/components/schemas/Disbursal' } }
+        allowedTransitions: { type: array, items: { type: string } }
+        canUpload: { type: boolean }
+    Dashboard:
+      type: object
+      required: [month, view, registered, stages, needsAction, approval, revenue, recent, totalCases]
+      properties:
+        month: { type: string }
+        view: { type: string }
+        registered: { type: integer }
+        stages:
+          type: array
+          items: { type: object, required: [key, count], properties: { key: { type: string }, count: { type: integer } } }
+        needsAction: { type: integer }
+        approval:
+          type: object
+          required: [approved, decided]
+          properties: { approved: { type: integer }, decided: { type: integer }, ratePct: { type: [integer, 'null'] } }
+        revenue:
+          type: object
+          required: [cases, amountPaise, byProduct]
+          properties:
+            cases: { type: integer }
+            amountPaise: { type: number }
+            byProduct:
+              type: array
+              items:
+                type: object
+                required: [product, productName, cases, amountPaise]
+                properties: { product: { type: string }, productName: { type: string }, cases: { type: integer }, amountPaise: { type: number } }
+        commission:
+          type: [object, 'null']
+          properties: { pending: { type: number }, inReview: { type: number }, paid: { type: number } }
+        recent: { type: array, items: { $ref: '#/components/schemas/CaseSummary' } }
+        totalCases: { type: integer }
+    Notification:
+      type: object
+      required: [id, type, payload, createdAt]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        payload:
+          type: object
+          required: [caseId, caseNo, status]
+          properties: { caseId: { type: string }, caseNo: { type: string }, status: { type: string } }
+        readAt: { type: [string, 'null'] }
+        createdAt: { type: string }
+    NotificationPrefs:
+      type: object
+      required: [prefs]
+      properties:
+        prefs:
+          type: object
+          additionalProperties:
+            type: object
+            required: [email, inApp]
+            properties: { email: { type: boolean }, inApp: { type: boolean } }
+    OpsCaseRow:
+      type: object
+      required: [id, caseNo, product, productName, status, loanAmountPaise, possibleDuplicate, partner, ageHours]
+      properties:
+        id: { type: string }
+        caseNo: { type: string }
+        product: { type: string }
+        productName: { type: string }
+        status: { type: string }
+        loanAmountPaise: { type: number }
+        possibleDuplicate: { type: boolean }
+        partner: { type: string }
+        assignee: { type: [string, 'null'] }
+        ageHours: { type: integer }
+    OpsCaseDetail:
+      type: object
+      required: [id, caseNo, status, version, partner, product, productName, loanType, loanAmountPaise, tenureMonths, possibleDuplicate, lenderId, lenders, location, details, history, documents, disbursals, notes, allowedTransitions]
+      properties:
+        id: { type: string }
+        caseNo: { type: string }
+        status: { type: string }
+        version: { type: integer }
+        partner: { type: string }
+        product: { type: string }
+        productName: { type: string }
+        loanType: { type: string }
+        assignee: { type: [string, 'null'] }
+        loanAmountPaise: { type: number }
+        tenureMonths: { type: integer }
+        possibleDuplicate: { type: boolean }
+        lenderId: { type: string }
+        lenders:
+          type: array
+          items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
+        sanctionedAmountPaise: { type: [number, 'null'] }
+        location:
+          type: object
+          required: [city, state, pincode]
+          properties: { city: { type: string }, state: { type: string }, pincode: { type: string } }
+        details: { type: object, additionalProperties: true }
+        history: { type: array, items: { $ref: '#/components/schemas/HistoryEntry' } }
+        documents: { type: array, items: { $ref: '#/components/schemas/CaseFile' } }
+        disbursals: { type: array, items: { $ref: '#/components/schemas/Disbursal' } }
+        notes: { type: array, items: { $ref: '#/components/schemas/CaseNote' } }
+        reversal:
+          type: [object, 'null']
+          properties: { id: { type: string }, reasonCode: { type: string }, reference: { type: string }, note: { type: [string, 'null'] }, status: { type: string } }
+        allowedTransitions: { type: array, items: { type: string } }
+    Invoice:
+      type: object
+      required: [id, status, caseId, caseNo, disbursalPaise, grossPaise, gstPaise, tdsPaise, netPaise, recoveredPaise, version, createdAt, applicant]
+      properties:
+        id: { type: string }
+        invoiceNo: { type: [string, 'null'] }
+        status: { type: string }
+        caseId: { type: string }
+        caseNo: { type: string }
+        disbursalPaise: { type: number }
+        grossPaise: { type: number }
+        gstPaise: { type: number }
+        tdsPaise: { type: number }
+        netPaise: { type: number }
+        recoveredPaise: { type: number }
+        version: { type: integer }
+        createdAt: { type: string }
+        raisedAt: { type: [string, 'null'] }
+        paidAt: { type: [string, 'null'] }
+        payoutRef: { type: [string, 'null'] }
+        applicant: { type: string }
+    InvoiceDetail:
+      allOf:
+        - $ref: '#/components/schemas/Invoice'
+        - type: object
+          required: [events, legalName, canRaise]
+          properties:
+            rate: { type: [object, 'null'], additionalProperties: true }
+            billing: { type: [object, 'null'], additionalProperties: true }
+            legalName: { type: string }
+            canRaise: { type: boolean }
+            events: { type: array, items: { $ref: '#/components/schemas/HistoryEntry' } }
+    OpsInvoice:
+      type: object
+      required: [id, status, caseNo, partner, version, grossPaise, netPaise]
+      properties:
+        id: { type: string }
+        invoiceNo: { type: [string, 'null'] }
+        status: { type: string }
+        caseNo: { type: string }
+        partner: { type: string }
+        version: { type: integer }
+        grossPaise: { type: number }
+        netPaise: { type: number }
+        payoutRef: { type: [string, 'null'] }
+        payoutRequestedBy: { type: [string, 'null'] }
+    RateCard:
+      type: object
+      required: [id, lender, product, slabMinPaise, pctBps, clawbackMonths, validFrom, status, createdBy]
+      properties:
+        id: { type: string }
+        lender: { type: string }
+        product: { type: string }
+        loanType: { type: [string, 'null'] }
+        slabMinPaise: { type: number }
+        slabMaxPaise: { type: [number, 'null'] }
+        pctBps: { type: integer }
+        clawbackMonths: { type: integer }
+        validFrom: { type: string }
+        validTo: { type: [string, 'null'] }
+        status: { type: string }
+        createdBy: { type: string }
+    Clawback:
+      type: object
+      required: [id, partner, amountPaise, recoveredPaise, reason, status, raisedBy]
+      properties:
+        id: { type: string }
+        partner: { type: string }
+        invoiceNo: { type: [string, 'null'] }
+        amountPaise: { type: number }
+        recoveredPaise: { type: number }
+        reason: { type: string }
+        status: { type: string }
+        raisedBy: { type: string }
+    Billing:
+      type: object
+      required: [gstRegistered, sacCode, panLast4, bankLast4, ifsc, bankName, branch, verificationStatus]
+      properties:
+        gstRegistered: { type: boolean }
+        gstin: { type: [string, 'null'] }
+        sacCode: { type: string }
+        panLast4: { type: string }
+        bankLast4: { type: string }
+        ifsc: { type: string }
+        bankName: { type: string }
+        branch: { type: string }
+        verificationStatus: { type: string }
+        reviewerNote: { type: [string, 'null'] }
+    Company:
+      type: object
+      required: [refCode, channelName, legalName, city, pincode, status, kycStatus, maskCustomerContact, registeredAt, products, admins]
+      properties:
+        refCode: { type: string }
+        channelName: { type: string }
+        legalName: { type: string }
+        city: { type: string }
+        pincode: { type: string }
+        employeeBand: { type: [string, 'null'] }
+        businessEmail: { type: [string, 'null'] }
+        businessPhone: { type: [string, 'null'] }
+        status: { type: string }
+        kycStatus: { type: string }
+        maskCustomerContact: { type: boolean }
+        registeredAt: { type: string }
+        lastLoginAt: { type: [string, 'null'] }
+        products:
+          type: array
+          items: { type: object, required: [code, name], properties: { code: { type: string }, name: { type: string } } }
+        admins:
+          type: array
+          items:
+            type: object
+            required: [name, email]
+            properties: { name: { type: string }, email: { type: string }, phone: { type: [string, 'null'] } }
+        billing:
+          oneOf:
+            - $ref: '#/components/schemas/Billing'
+            - type: 'null'
+    OpsBilling:
+      type: object
+      required: [gstRegistered, sacCode, pan, bankAccount, ifsc, bankName, branch, verificationStatus]
+      properties:
+        gstRegistered: { type: boolean }
+        gstin: { type: [string, 'null'] }
+        sacCode: { type: string }
+        pan: { type: string }
+        bankAccount: { type: string }
+        ifsc: { type: string }
+        bankName: { type: string }
+        branch: { type: string }
+        verificationStatus: { type: string }
+        reviewerNote: { type: [string, 'null'] }
   responses:
     Error:
       description: Problem
@@ -316,6 +646,9 @@ paths:
     get:
       operationId: listUsers
       x-access: users.manage
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
       responses:
         '200':
           description: Users in the caller's organisation
@@ -323,8 +656,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, nextCursor]
                 properties:
+                  nextCursor: { type: [string, 'null'] }
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/User' }
@@ -338,6 +672,23 @@ paths:
       responses:
         '200':
           description: One user in the caller's organisation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateUser
+      x-access: users.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
@@ -461,6 +812,8 @@ paths:
       operationId: opsListPartners
       x-access: partners.view
       parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
         - { name: kycStatus, in: query, schema: { type: string } }
       responses:
         '200':
@@ -469,8 +822,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, nextCursor]
                 properties:
+                  nextCursor: { type: [string, 'null'] }
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/OpsPartner' }
@@ -554,6 +908,7 @@ paths:
       x-access: case.create
       parameters:
         - { name: product, in: query, required: true, schema: { type: string } }
+        - { name: loanType, in: query, required: false, schema: { type: string } }
       responses:
         '200':
           description: Lenders offering the product
@@ -583,6 +938,9 @@ paths:
     get:
       operationId: listDrafts
       x-access: case.create
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
       responses:
         '200':
           description: Your open drafts
@@ -590,8 +948,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, nextCursor]
                 properties:
+                  nextCursor: { type: [string, 'null'] }
                   data:
                     type: array
                     items: { type: object, required: [id], properties: { id: { type: string }, product: { type: [string, 'null'] }, updatedAt: { type: string } } }
@@ -685,10 +1044,736 @@ paths:
         default: { $ref: '#/components/responses/Error' }
     post:
       operationId: giveConsent
+      description: Needs the one-time code sent to the customer's phone (SEC-01).
+      x-access: public
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '204':
+          description: Recorded
+        default: { $ref: '#/components/responses/Error' }
+  /public/consent/{token}/code:
+    post:
+      operationId: sendConsentCode
+      description: Sends a one-time code to the phone the consent link went to.
       x-access: public
       parameters:
         - { name: token, in: path, required: true, schema: { type: string } }
       responses:
+        '202':
+          description: Sent
+        default: { $ref: '#/components/responses/Error' }
+  /dashboard/summary:
+    get:
+      operationId: getDashboard
+      x-access: dashboard.view
+      parameters:
+        - { name: month, in: query, required: true, schema: { type: string } }
+        - { name: view, in: query, required: false, schema: { type: string } }
+        - { name: product, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        default: { $ref: '#/components/responses/Error' }
+  /cases:
+    get:
+      operationId: listCases
+      x-access: case.view
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: bucket, in: query, required: false, schema: { type: string } }
+        - { name: caseType, in: query, required: false, schema: { type: string } }
+        - { name: product, in: query, required: false, schema: { type: string } }
+        - { name: registrationMonth, in: query, required: false, schema: { type: string } }
+        - { name: disbursedMonth, in: query, required: false, schema: { type: string } }
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: sort, in: query, required: false, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/CaseSummary' } }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        default: { $ref: '#/components/responses/Error' }
+  /cases/export:
+    post:
+      operationId: exportCases
+      x-access: case.export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /cases/{id}:
+    get:
+      operationId: getCase
+      x-access: case.view
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CaseDetail' }
+        default: { $ref: '#/components/responses/Error' }
+  /cases/{id}/transitions:
+    post:
+      operationId: transitionCase
+      x-access: case.fieldwork
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /cases/{id}/notes:
+    post:
+      operationId: addCaseNote
+      x-access: case.note
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /cases/{id}/documents:
+    post:
+      operationId: uploadExtraDocument
+      x-access: case.fieldwork
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+      responses:
         '204':
-          description: Recorded
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /cases/{id}/documents/{docId}/url:
+    get:
+      operationId: caseDocumentUrl
+      x-access: case.view
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: docId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        default: { $ref: '#/components/responses/Error' }
+  /cases/{id}/pii-reveal:
+    post:
+      operationId: revealPii
+      x-access: pii.reveal
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [value]
+                properties: { value: { type: string } }
+        default: { $ref: '#/components/responses/Error' }
+  /notifications:
+    get:
+      operationId: listNotifications
+      x-access: notifications.view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, unreadCount]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+                  unreadCount: { type: integer }
+        default: { $ref: '#/components/responses/Error' }
+  /notifications/read:
+    post:
+      operationId: markNotificationsRead
+      x-access: notifications.view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /partner:
+    get:
+      operationId: getCompany
+      x-access: settings.view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateCompany
+      x-access: settings.edit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        default: { $ref: '#/components/responses/Error' }
+  /partner/billing:
+    patch:
+      operationId: saveBilling
+      x-access: settings.edit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        default: { $ref: '#/components/responses/Error' }
+  /partner/notification-prefs:
+    get:
+      operationId: getNotificationPrefs
+      x-access: notifications.view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPrefs' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: saveNotificationPrefs
+      x-access: notifications.view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPrefs' }
+        default: { $ref: '#/components/responses/Error' }
+  /users/invite:
+    post:
+      operationId: inviteUser
+      x-access: users.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Error' }
+  /users/{id}/deactivate:
+    post:
+      operationId: deactivateUser
+      x-access: users.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /users/{id}/reactivate:
+    post:
+      operationId: reactivateUser
+      x-access: users.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /users/{id}/resend-invite:
+    post:
+      operationId: resendInvite
+      x-access: users.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /users/{id}/sign-out:
+    post:
+      operationId: signOutUser
+      x-access: users.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /invoices:
+    get:
+      operationId: listInvoices
+      x-access: invoices.manage
+      parameters:
+        - { name: group, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, summary]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Invoice' } }
+                  summary:
+                    type: object
+                    required: [pendingPaise, underReviewPaise, paidPaise]
+                    properties: { pendingPaise: { type: number }, underReviewPaise: { type: number }, paidPaise: { type: number } }
+        default: { $ref: '#/components/responses/Error' }
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      x-access: invoices.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceDetail' }
+        default: { $ref: '#/components/responses/Error' }
+  /invoices/{id}/raise:
+    post:
+      operationId: raiseInvoice
+      x-access: invoices.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /invoices/{id}/dispute:
+    post:
+      operationId: disputeInvoice
+      x-access: invoices.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases:
+    get:
+      operationId: opsCaseQueue
+      x-access: ops.cases
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: assigned, in: query, required: false, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/OpsCaseRow' } }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/staff:
+    get:
+      operationId: opsStaff
+      x-access: ops.assign
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/auto-assign:
+    post:
+      operationId: opsAutoAssign
+      x-access: ops.assign
+      responses:
+        '200':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}:
+    get:
+      operationId: opsGetCase
+      x-access: ops.cases
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpsCaseDetail' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}/assign:
+    post:
+      operationId: opsAssignCase
+      x-access: ops.assign
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}/take:
+    post:
+      operationId: opsTakeCase
+      x-access: ops.cases
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}/transitions:
+    post:
+      operationId: opsTransitionCase
+      x-access: ops.cases
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}/disbursals:
+    post:
+      operationId: opsRecordDisbursal
+      x-access: ops.cases
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}/reversal:
+    post:
+      operationId: opsRequestReversal
+      x-access: ops.cases
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}/reversal/decision:
+    post:
+      operationId: opsDecideReversal
+      x-access: finance.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/cases/{id}/documents/{docId}/url:
+    get:
+      operationId: opsCaseDocumentUrl
+      x-access: ops.cases
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: docId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/invoices:
+    get:
+      operationId: opsInvoices
+      x-access: finance.manage
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/OpsInvoice' } }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/invoices/{id}/approve:
+    post:
+      operationId: opsApproveInvoice
+      x-access: finance.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/invoices/{id}/mark-paid:
+    post:
+      operationId: opsMarkPaid
+      x-access: finance.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/invoices/{id}/confirm-paid:
+    post:
+      operationId: opsConfirmPaid
+      x-access: finance.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/invoices/{id}/resolve-dispute:
+    post:
+      operationId: opsResolveDispute
+      x-access: finance.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/rate-cards:
+    get:
+      operationId: opsRateCards
+      x-access: finance.manage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, lenders]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/RateCard' } }
+                  lenders:
+                    type: array
+                    items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: opsCreateRateCard
+      x-access: finance.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/rate-cards/{id}/decision:
+    post:
+      operationId: opsDecideRateCard
+      x-access: finance.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/clawbacks:
+    get:
+      operationId: opsClawbacks
+      x-access: finance.manage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Clawback' } }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/clawbacks/{id}/decision:
+    post:
+      operationId: opsDecideClawback
+      x-access: finance.manage
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
+        default: { $ref: '#/components/responses/Error' }
+  /ops/partners/{id}/billing:
+    get:
+      operationId: opsGetBilling
+      x-access: kyc.review
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpsBilling' }
+        default: { $ref: '#/components/responses/Error' }
+  /ops/partners/{id}/billing/decision:
+    post:
+      operationId: opsDecideBilling
+      x-access: kyc.review
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204':
+          description: OK
         default: { $ref: '#/components/responses/Error' }

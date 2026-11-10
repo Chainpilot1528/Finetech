@@ -4,6 +4,7 @@ import type { Mailer, MailMessage } from '../ports/index.js';
 export class SmtpMailer implements Mailer {
   private readonly transport;
   constructor(url: string, private readonly from: string) {
+    // The outbox puts a time limit on every send, so a stuck mail server can't hold a request (BUG-03).
     this.transport = nodemailer.createTransport(url);
   }
   async send(message: MailMessage): Promise<void> {

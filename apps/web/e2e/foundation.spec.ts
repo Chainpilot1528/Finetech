@@ -77,8 +77,10 @@ test('an invited user sets a first password from the emailed link', async ({ pag
   await page.getByRole('button', { name: 'Send link' }).click();
   await expect(page.getByRole('status')).toContainText('on its way');
 
-  await page.goto('/dev/inbox');
-  await page.getByRole('link', { name: /reset-password/ }).first().click();
+  // Read the mail from the API, not the /dev/inbox page, so this also runs against a production build (DX-04).
+  await expect.poll(async () => (await inbox(page)).some((m) => m.to === 'invited@alpha.test' && /reset-password/.test(m.text))).toBe(true);
+  const mail = (await inbox(page)).find((m) => m.to === 'invited@alpha.test' && /reset-password/.test(m.text))!;
+  await page.goto(/https?:\/\/\S+/.exec(mail.text)![0]);
   const password = `e2e-${Date.now()}-Secret`;
   await page.getByLabel('New password', { exact: true }).fill(password);
   await page.getByLabel('Confirm new password').fill(password);
@@ -97,7 +99,7 @@ test('works at phone width with no sideways scroll and a working menu', async ({
   expect(overflow).toBe(false);
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 });
 
 test('pages carry security headers and run clean under the CSP', async ({ page }) => {

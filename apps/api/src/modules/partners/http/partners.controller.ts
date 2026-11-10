@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { readPage } from '../../../platform/paging.js';
+import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { REGISTRATION_PRODUCTS } from '@vittora/product-schemas';
 import { DomainError } from '@vittora/shared-kernel';
@@ -8,6 +9,7 @@ import { type AuthedRequest, OpsOnly, Public, Requires, metaOf, parse, principal
 import { KYC_TYPES, type KycType, KycService } from '../application/kyc.service.js';
 import { OpsKycService } from '../application/ops-kyc.service.js';
 import { RegistrationService } from '../application/registration.service.js';
+import { SettingsService } from '../application/settings.service.js';
 
 const name = z.string().trim().min(2).max(120);
 const phone = z.string().regex(/^[6-9][0-9]{9}$/);
@@ -27,6 +29,26 @@ const RegisterBody = z.object({
 const AcceptBody = z.object({ version: z.string() });
 const ReviewBody = z.object({ decision: z.enum(['approved', 'rejected']), note: z.string().max(500).optional() });
 const DecisionBody = z.object({ decision: z.enum(['approved', 'rejected']) });
+const bands = ['1-5', '6-10', '11-25', '26-50', '51-100', '100+'] as const;
+const CompanyBody = z.object({
+  city: z.string().trim().min(2).max(80).optional(),
+  pincode: z.string().regex(/^[1-9][0-9]{5}$/).optional(),
+  employeeBand: z.enum(bands).optional(),
+  businessEmail: z.string().trim().email().optional(),
+  businessPhone: phone.nullable().optional(),
+  maskCustomerContact: z.boolean().optional(),
+}).strict();
+const BillingBody = z.object({
+  gstRegistered: z.boolean(),
+  gstin: z.string().trim().toUpperCase().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/).optional(),
+  pan: z.string().trim().toUpperCase().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/),
+  sacCode: z.string().regex(/^[0-9]{6}$/).optional(),
+  bankAccount: z.string().trim().regex(/^[0-9]{9,18}$/),
+  ifsc: z.string().trim().toUpperCase().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/),
+  bankName: z.string().trim().min(2).max(120),
+  branch: z.string().trim().min(2).max(120),
+});
+const BillingDecision = z.object({ decision: z.enum(['verified', 'rejected']), note: z.string().max(500).optional() });
 const uploadLimits = { limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,7 +62,26 @@ export class PartnersController {
   constructor(
     @Inject(RegistrationService) private readonly registration: RegistrationService,
     @Inject(KycService) private readonly kyc: KycService,
+    @Inject(SettingsService) private readonly settings: SettingsService,
   ) {}
+
+  @Requires('settings.view')
+  @Get('partner')
+  partner(@Req() req: AuthedRequest) {
+    return this.settings.get(principalOf(req), tenantOf(req));
+  }
+
+  @Requires('settings.edit')
+  @Patch('partner')
+  updatePartner(@Body() body: unknown, @Req() req: AuthedRequest) {
+    return this.settings.update(principalOf(req), tenantOf(req), parse(CompanyBody, body), metaOf(req));
+  }
+
+  @Requires('settings.edit')
+  @Patch('partner/billing')
+  saveBilling(@Body() body: unknown, @Req() req: AuthedRequest) {
+    return this.settings.saveBilling(principalOf(req), tenantOf(req), parse(BillingBody, body), metaOf(req));
+  }
 
   @Public()
   @Post('partners/register')
@@ -95,24 +136,41 @@ export class PartnersController {
 @OpsOnly()
 @Controller('ops')
 export class OpsPartnersController {
-  constructor(@Inject(OpsKycService) private readonly ops: OpsKycService) {}
+  constructor(
+    @Inject(OpsKycService) private readonly ops: OpsKycService,
+    @Inject(SettingsService) private readonly settings: SettingsService,
+  ) {}
+
+  @Requires('kyc.review')
+  @Get('partners/:id/billing')
+  billing(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.settings.opsBilling(principalOf(req), checkId(id), metaOf(req));
+  }
+
+  @Requires('kyc.review')
+  @Post('partners/:id/billing/decision')
+  @HttpCode(204)
+  async decideBilling(@Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest) {
+    const input = parse(BillingDecision, body);
+    await this.settings.decideBilling(principalOf(req), checkId(id), input.decision, input.note, metaOf(req));
+  }
 
   @Requires('partners.view')
   @Get('partners')
-  async list(@Query('kycStatus') kycStatus?: string) {
-    return { data: await this.ops.list(kycStatus || undefined) };
+  list(@Req() req: AuthedRequest, @Query() q: { kycStatus?: string; limit?: string; cursor?: string }) {
+    return this.ops.list(principalOf(req), metaOf(req), readPage(q, 100), q.kycStatus || undefined);
   }
 
   @Requires('partners.view')
   @Get('partners/:id')
-  get(@Param('id') id: string) {
-    return this.ops.get(checkId(id));
+  get(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.ops.get(principalOf(req), checkId(id), metaOf(req));
   }
 
   @Requires('kyc.review')
   @Get('kyc/documents/:id/url')
-  documentUrl(@Param('id') id: string) {
-    return this.ops.documentLink(checkId(id));
+  documentUrl(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.ops.documentLink(principalOf(req), checkId(id), metaOf(req));
   }
 
   @Requires('kyc.review')

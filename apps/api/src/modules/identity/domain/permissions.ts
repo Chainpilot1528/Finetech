@@ -4,6 +4,7 @@ import type { Role } from '@vittora/shared-kernel';
 export const CAPABILITIES = [
   'dashboard.view',
   'case.create',
+  'case.view',
   'case.view_all',
   'case.view_own',
   'case.note',
@@ -22,31 +23,34 @@ export const CAPABILITIES = [
   'kyc.manage',
   'kyc.review',
   'partners.view',
+  'ops.cases',
+  'ops.assign',
+  'finance.manage',
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
 const MATRIX: Record<Role, readonly Capability[]> = {
   admin: [
-    'dashboard.view', 'case.create', 'case.view_all', 'case.note', 'case.fieldwork',
+    'dashboard.view', 'case.create', 'case.view', 'case.view_all', 'case.note', 'case.fieldwork',
     'case.inhouse_lifecycle', 'case.bank_allocate', 'case.bureau_pull', 'case.export', 'pii.reveal',
     'policy.manage', 'users.manage', 'invoices.manage', 'settings.view', 'settings.edit',
     'notifications.view', 'kyc.manage',
   ],
   manager: [
-    'dashboard.view', 'case.create', 'case.view_all', 'case.note', 'case.fieldwork',
+    'dashboard.view', 'case.create', 'case.view', 'case.view_all', 'case.note', 'case.fieldwork',
     'case.inhouse_lifecycle', 'case.bank_allocate', 'case.bureau_pull', 'case.export', 'pii.reveal',
     'policy.manage', 'settings.view', 'notifications.view',
   ],
   executive: [
-    'dashboard.view', 'case.create', 'case.view_own', 'case.note', 'case.fieldwork',
+    'dashboard.view', 'case.create', 'case.view', 'case.view_own', 'case.note', 'case.fieldwork',
     'case.bureau_pull', 'pii.reveal', 'settings.view', 'notifications.view',
   ],
-  viewer: ['dashboard.view', 'case.view_all', 'settings.view', 'notifications.view'],
-  ops_agent: ['partners.view'],
-  ops_lead: ['partners.view', 'kyc.review'],
+  viewer: ['dashboard.view', 'case.view', 'case.view_all', 'settings.view', 'notifications.view'],
+  ops_agent: ['partners.view', 'ops.cases'],
+  ops_lead: ['partners.view', 'kyc.review', 'ops.cases', 'ops.assign'],
   kyc_reviewer: ['partners.view', 'kyc.review'],
-  finance: ['partners.view'],
-  super_admin: ['partners.view', 'kyc.review'],
+  finance: ['partners.view', 'finance.manage'],
+  super_admin: ['partners.view', 'kyc.review', 'ops.cases', 'ops.assign', 'finance.manage'],
 };
 
 /** Capabilities that also need a feature switched on for the partner (§7.1 †). */

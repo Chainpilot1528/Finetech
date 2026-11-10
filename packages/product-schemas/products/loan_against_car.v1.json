@@ -57,19 +57,22 @@
         "type": "string",
         "title": "Registration number",
         "pattern": "^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$",
-        "description": "For example MH12AB1234"
+        "description": "For example MH12AB1234",
+        "x-sensitive": true
       },
       "chassisNumber": {
         "type": "string",
         "title": "Chassis number",
         "minLength": 5,
-        "maxLength": 30
+        "maxLength": 30,
+        "x-sensitive": true
       },
       "engineNumber": {
         "type": "string",
         "title": "Engine number",
         "minLength": 5,
-        "maxLength": 30
+        "maxLength": 30,
+        "x-sensitive": true
       },
       "carValue": {
         "type": "integer",
@@ -111,6 +114,10 @@
     "minAmount": 100000,
     "maxAmount": 3000000,
     "minTenure": 12,
-    "maxTenure": 60
+    "maxTenure": 60,
+    "maxLtvPercent": 100,
+    "warnLtvPercent": 85,
+    "maxVehicleAgeAtMaturityYears": 12,
+    "vehicleYearField": "carYear"
   }
 }

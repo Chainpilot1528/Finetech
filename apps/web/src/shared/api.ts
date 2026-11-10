@@ -44,6 +44,26 @@ export async function uploadFile(path: string, file: File): Promise<void> {
   }
 }
 
+/** Posts and saves the response as a file. */
+export async function downloadPost(path: string, body: object, fileName: string): Promise<void> {
+  const res = await fetch(`/api/v1${path}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json', 'x-csrf-token': await csrfToken() },
+  });
+  if (!res.ok) {
+    const problem = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, problem.code ?? 'UNKNOWN', problem.errors, problem.title);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 /** Unwraps a response, turning a problem+json body into an ApiError with friendly text. */
 export async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,

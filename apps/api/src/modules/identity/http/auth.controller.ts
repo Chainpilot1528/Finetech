@@ -3,7 +3,7 @@ import { DomainError } from '@vittora/shared-kernel';
 import type { CookieOptions, Response } from 'express';
 import { z } from 'zod';
 import type { Config } from '../../../platform/config.js';
-import { randomToken } from '../../../platform/crypto.js';
+import { randomToken, safeEqual } from '../../../platform/crypto.js';
 import { AuthService } from '../application/auth.service.js';
 import { capabilitiesFor } from '../domain/permissions.js';
 import { SESSION_ABSOLUTE_MS } from '../domain/rules.js';
@@ -39,8 +39,12 @@ export class AuthController {
 
   @Public()
   @Get('auth/csrf')
-  csrf(@Res({ passthrough: true }) res: Response) {
-    const token = signCsrf(this.config.HMAC_KEY, randomToken(16));
+  csrf(@Req() req: AuthedRequest, @Res({ passthrough: true }) res: Response) {
+    // Keep a valid token: replacing it would break every other tab, which still holds the old one.
+    const current: string | undefined = req.cookies?.[cookieNames(this.config).csrf];
+    const nonce = current?.split('.')[0] ?? '';
+    const valid = !!current && safeEqual(current, signCsrf(this.config.HMAC_KEY, nonce));
+    const token = valid ? current : signCsrf(this.config.HMAC_KEY, randomToken(16));
     res.cookie(cookieNames(this.config).csrf, token, this.cookieOptions(false));
     return { csrfToken: token };
   }
