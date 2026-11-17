@@ -40,7 +40,9 @@ class AppModule {
     const devMailbox = config.DEV_MAILBOX === 'true';
     const mailer =
       o.mailer ??
-      (devMailbox || !config.SMTP_URL ? new DevMailbox() : new SmtpMailer(config.SMTP_URL, config.MAIL_FROM));
+      (devMailbox || !config.SMTP_URL
+        ? new DevMailbox()
+        : new SmtpMailer(config.SMTP_URL, config.MAIL_FROM, config.DEPLOY_MODE === 'demo'));
     const breached =
       o.breached ?? (config.BREACHED_PASSWORD_CHECK === 'true' ? new PwnedPasswordsChecker() : new NoBreachCheck());
     return {

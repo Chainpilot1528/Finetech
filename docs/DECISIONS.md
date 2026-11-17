@@ -45,6 +45,7 @@ Why Vittora is built the way it is, including what we chose **not** to do. Read 
 | D-027 | 2026-11-09 | The database's duplicate rule waits for D-018 | Technical | Deferred |
 | D-028 | 2026-11-09 | Lists page in the API; screens still show the first page | Technical | Deferred |
 | D-029 | 2026-11-09 | CI runs the browser tests against a production build | Technical | Accepted |
+| D-030 | 2026-11-17 | A free, non-AWS demo server in India for client testing | Technical | Accepted |
 
 ---
 
@@ -210,6 +211,13 @@ architecture reviews shouldn't re-propose changes to them without new evidence.
 - **Decision:** a CI job starts the database, seeds it, builds the web app and runs every browser test against `next start`. Tests read mail through the API, not the dev inbox page. Timeouts come from environment variables.
 - **Supersedes:** D-019.
 - **Owner:** lead engineer · **Date:** 2026-11-09
+
+### D-030 · A free, non-AWS demo server in India for client testing — Accepted
+- **Context:** the client needs a link to try the portal. Hosting must avoid AWS, including platforms built on it (Vercel, Netlify), and cost nothing while testing.
+- **Decision:** one Oracle Cloud "Always Free" server in Mumbai or Hyderabad runs everything: Postgres, API, web app, a Mailpit test inbox, and Caddy for HTTPS and a site password. The API runs with `DEPLOY_MODE=demo`, which refuses the dev inbox, requires HTTPS, keeps the API on loopback, sends every email and text to the test inbox on the same server, and uses secure host-only cookies. Fake data only.
+- **Not chosen:** Netlify or Vercel (run on AWS); a tunnel from a laptop (only works while the laptop is on); `NODE_ENV=production` (it rightly refuses until real storage, scanning and SMS exist).
+- **Trigger to revisit:** real customer data. That needs the production setup after Part 8, not this server.
+- **Owner:** lead engineer · **Date:** 2026-11-17
 
 ---
 

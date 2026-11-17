@@ -30,6 +30,11 @@ The dev mailbox shows every sign-in link, reset link and one-time code. It only 
 `DEV_MAILBOX=true`, the API refuses to start with it unless it listens on `127.0.0.1`, and `pnpm dev`
 binds the web app to `127.0.0.1` too. Never run the app this way on a shared or public host.
 
+### A demo link for a client
+
+To share a test link, follow [docs/DEMO-DEPLOY.md](docs/DEMO-DEPLOY.md): one free Oracle Cloud server
+in India, with `DEPLOY_MODE=demo`, a password on the site and a separate test inbox. Fake data only.
+
 ## Tests
 
 ```bash

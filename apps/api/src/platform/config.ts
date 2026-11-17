@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /**
+   * `demo` is a shared test link with fake data only (D-030): secure cookies, no dev inbox, and every
+   * email or text goes to a test inbox on the same server. It is not production and holds no real data.
+   */
+  DEPLOY_MODE: z.enum(['local', 'demo']).default('local'),
   API_PORT: z.coerce.number().default(4000),
   /** Where the API listens. The dev mailbox is only allowed on a loopback address. */
   API_HOST: z.string().default('127.0.0.1'),
@@ -40,8 +45,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (parsed.data.DEV_MAILBOX === 'true' && !LOOPBACK.has(parsed.data.API_HOST)) {
     throw new Error('Invalid configuration: DEV_MAILBOX only works when API_HOST is 127.0.0.1, ::1 or localhost');
   }
+  if (parsed.data.DEPLOY_MODE === 'demo') checkDemo(parsed.data);
   if (parsed.data.NODE_ENV === 'production') {
     throw new Error('Invalid configuration: production needs real object storage, a virus scanner and an SMS provider');
   }
   return parsed.data;
 }
+
+function checkDemo(c: Config) {
+  const problems: string[] = [];
+  if (c.DEV_MAILBOX === 'true') problems.push('DEV_MAILBOX must be off in demo mode');
+  let smtpHost = '';
+  try { smtpHost = c.SMTP_URL ? new URL(c.SMTP_URL).hostname.replace(/^\[|\]$/g, '') : ''; } catch { /* reported below */ }
+  if (!LOOPBACK.has(smtpHost)) problems.push('SMTP_URL must point at the test inbox on this server (127.0.0.1) in demo mode');
+  if (!c.WEB_ORIGIN.startsWith('https://')) problems.push('WEB_ORIGIN must use https in demo mode');
+  if (!LOOPBACK.has(c.API_HOST)) problems.push('API_HOST must be a loopback address in demo mode; the web app proxies to it');
+  if (problems.length) throw new Error(`Invalid configuration: ${problems.join('; ')}`);
+}
+
+/** HTTPS-only, host-only cookies wherever the app is served over HTTPS. */
+export const secureCookies = (c: Config) => c.NODE_ENV === 'production' || c.DEPLOY_MODE === 'demo';

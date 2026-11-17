@@ -19,6 +19,7 @@ Loan-distribution partner portal. Monorepo: `apps/api` (NestJS), `apps/web` (Nex
 - Audit rows hold ids and codes only, never names, emails, phones or tokens.
 - Emails, texts and file deletions go through the outbox (`platform/outbox.ts`) inside the transaction that causes them. Never call the mailer or delete a stored file directly.
 - Staff reads of partner or case data write an audit row.
+- `DEPLOY_MODE=demo` is a shared test link with fake data only. No AWS, and nothing built on AWS (Vercel, Netlify).
 - Migrations are forward-only. Add a new file; never edit an applied one.
 - No `@Inject`-less constructors: tests and dev run without decorator metadata.
 - A bug fix starts with a failing test.

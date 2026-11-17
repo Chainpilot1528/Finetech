@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs
 import { DomainError } from '@vittora/shared-kernel';
 import type { CookieOptions, Response } from 'express';
 import { z } from 'zod';
-import type { Config } from '../../../platform/config.js';
+import { type Config, secureCookies } from '../../../platform/config.js';
 import { randomToken, safeEqual } from '../../../platform/crypto.js';
 import { AuthService } from '../application/auth.service.js';
 import { capabilitiesFor } from '../domain/permissions.js';
@@ -34,7 +34,7 @@ export class AuthController {
   ) {}
 
   private cookieOptions(httpOnly: boolean): CookieOptions {
-    return { httpOnly, secure: this.config.NODE_ENV === 'production', sameSite: 'lax', path: '/' };
+    return { httpOnly, secure: secureCookies(this.config), sameSite: 'lax', path: '/' };
   }
 
   @Public()

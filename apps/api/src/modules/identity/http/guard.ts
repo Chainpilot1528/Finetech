@@ -2,7 +2,7 @@ import { type CanActivate, type ExecutionContext, Inject, Injectable, SetMetadat
 import { Reflector } from '@nestjs/core';
 import { DomainError } from '@vittora/shared-kernel';
 import type { Request } from 'express';
-import type { Config } from '../../../platform/config.js';
+import { type Config, secureCookies } from '../../../platform/config.js';
 import { hmac, safeEqual } from '../../../platform/crypto.js';
 import type { TenantContext } from '../../../platform/db.js';
 import { AuthService, type Principal, type RequestMeta } from '../application/auth.service.js';
@@ -25,7 +25,7 @@ export const OpsOnly = () => SetMetadata(OPS_ONLY, true);
 export type AuthedRequest = Request & { principal?: Principal };
 
 export const cookieNames = (config: Config) =>
-  config.NODE_ENV === 'production'
+  secureCookies(config)
     ? { session: '__Host-vittora_session', csrf: '__Host-vittora_csrf' }
     : { session: 'vittora_session', csrf: 'vittora_csrf' };
 

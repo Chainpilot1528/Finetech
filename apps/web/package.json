@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3000",
     "build": "next build",
+    "start": "next start -H 127.0.0.1 -p 3000",
     "typecheck": "tsc -p tsconfig.json",
     "e2e": "playwright test"
   },
