@@ -1,6 +1,9 @@
 node_modules/
 .next/
 .next-build/
+.next-demo/
+# Written by pnpm demo:tunnel; the link changes every run
+links.txt
 dist/
 .turbo/
 coverage/

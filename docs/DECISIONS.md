@@ -46,6 +46,7 @@ Why Vittora is built the way it is, including what we chose **not** to do. Read 
 | D-028 | 2026-11-09 | Lists page in the API; screens still show the first page | Technical | Deferred |
 | D-029 | 2026-11-09 | CI runs the browser tests against a production build | Technical | Accepted |
 | D-030 | 2026-11-17 | A free, non-AWS demo server in India for client testing | Technical | Accepted |
+| D-031 | 2026-11-18 | Demo link from a Mac through a Cloudflare quick tunnel, no card | Technical | Accepted |
 
 ---
 
@@ -218,6 +219,14 @@ architecture reviews shouldn't re-propose changes to them without new evidence.
 - **Not chosen:** Netlify or Vercel (run on AWS); a tunnel from a laptop (only works while the laptop is on); `NODE_ENV=production` (it rightly refuses until real storage, scanning and SMS exist).
 - **Trigger to revisit:** real customer data. That needs the production setup after Part 8, not this server.
 - **Owner:** lead engineer · **Date:** 2026-11-17
+
+### D-031 · Demo link from a Mac through a Cloudflare quick tunnel, no card — Accepted
+- **Context:** Oracle Cloud asks for a credit card, and the lead engineer doesn't have one.
+- **Decision:** `pnpm demo:tunnel` runs the portal in demo mode (D-030) on the developer's Mac and shares it through a Cloudflare quick tunnel: free, no account, not AWS, and the data stays on the Mac. A small Node proxy adds a site password and a separately passworded test inbox, so no other tools need installing. The link works only while the command runs and changes each time.
+- **Not chosen:** card-based clouds (Oracle, Google Cloud, Azure, DigitalOcean); hosts on AWS or Google Cloud; GitHub Codespaces (outside India, stops when idle).
+- **Trigger to revisit:** the client needs an always-on link, or a card becomes available (then D-030).
+- **Update 2026-11-18:** app pages accept either the site or the inbox password. Browsers keep one password per site, so after opening the inbox every request carried the inbox password and the app asked for the site password again.
+- **Owner:** lead engineer · **Date:** 2026-11-18
 
 ---
 

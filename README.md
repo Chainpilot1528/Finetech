@@ -32,8 +32,9 @@ binds the web app to `127.0.0.1` too. Never run the app this way on a shared or 
 
 ### A demo link for a client
 
-To share a test link, follow [docs/DEMO-DEPLOY.md](docs/DEMO-DEPLOY.md): one free Oracle Cloud server
-in India, with `DEPLOY_MODE=demo`, a password on the site and a separate test inbox. Fake data only.
+To share a test link, run `pnpm demo:tunnel` (with `pnpm db` running and `pnpm dev` stopped). It gives a
+free Cloudflare link to the app on your Mac, in `DEPLOY_MODE=demo`, with a site password and a separate
+test inbox. For an always-on server, see [docs/DEMO-DEPLOY.md](docs/DEMO-DEPLOY.md). Fake data only.
 
 ## Tests
 

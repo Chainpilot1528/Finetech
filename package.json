@@ -3,11 +3,14 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.16.1",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "setup:env": "tsx scripts/setup.ts",
     "db": "tsx scripts/dev-db.ts",
     "seed": "tsx scripts/seed.ts",
+    "demo:tunnel": "tsx scripts/demo-tunnel.ts",
     "dev": "turbo run dev",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
@@ -18,15 +21,19 @@
   },
   "devDependencies": {
     "@eslint/js": "^9",
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "^22",
+    "@types/pg": "^8",
+    "@types/smtp-server": "^3.5.13",
     "embedded-postgres": "16.15.0-beta.19",
     "eslint": "^9",
+    "mailparser": "^3.14.5",
     "pg": "^8",
     "prettier": "^3",
+    "smtp-server": "^3.21.6",
     "tsx": "^4",
     "turbo": "^2",
     "typescript": "^5",
-    "typescript-eslint": "^8",
-    "@types/node": "^22",
-    "@types/pg": "^8"
+    "typescript-eslint": "^8"
   }
 }

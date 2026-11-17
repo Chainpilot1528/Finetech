@@ -1,7 +1,60 @@
-# Demo server for client testing
+# Demo link for client testing
 
-A free test link for a client (D-030): one Oracle Cloud "Always Free" server in India runs the whole
-portal. No AWS, nothing built on AWS.
+Two free ways to give a client a test link. Neither uses AWS or anything built on it.
+
+| | From your Mac (`pnpm demo:tunnel`) | Oracle Cloud server |
+|---|---|---|
+| Card needed | **No** | Yes, to verify you |
+| Works when | your Mac is on and the command is running | always |
+| Link | changes each time you start it | fixed |
+| Set-up | one command | about an hour, once |
+
+> **Fake data only**, either way.
+
+---
+
+## Option A: from your Mac, no card (D-031)
+
+1. In one terminal, start the database and leave it running:
+
+   ```bash
+   pnpm db
+   ```
+
+2. Stop `pnpm dev` if it's running. In a second terminal, run:
+
+   ```bash
+   pnpm demo:tunnel
+   ```
+
+   The first time, it downloads Cloudflare's free tunnel tool (`cloudflared`) from Cloudflare's GitHub
+   page into `.dev/tools/`. No account is needed. After about a minute it prints the link, for example
+   `https://some-random-words.trycloudflare.com`.
+
+3. Send the client:
+   - the link
+   - the **site** username and password from `.dev/demo-passwords.env`
+   - one or two fake app accounts from `.dev/seed-credentials.md`
+
+   Sign-in links, password resets and consent codes appear in the **test inbox** at `<link>/inbox`, which
+   has its own password (also in `.dev/demo-passwords.env`). Share it with the client, or read the codes
+   for them.
+
+   Every page's link is also written to `links.txt` in the project folder.
+
+4. Press **Ctrl+C** to stop. The link stops working at once.
+
+**Things to know**
+- The link is new every time you start the command, so send a fresh one each session.
+- Keep the Mac awake and the lid open. The command stops idle sleep while it runs.
+- Messages in the test inbox are kept in memory and are gone when you stop.
+- `pnpm demo:tunnel --no-tunnel` starts everything except the public link, to check it works.
+
+---
+
+## Option B: Oracle Cloud "Always Free" server
+
+One Oracle Cloud "Always Free" server in India runs the whole portal (D-030).
 
 > **Fake data only.** No real names, phone numbers, PAN, Aadhaar or documents. Real customer data needs
 > the production setup after Part 8, not this server.
