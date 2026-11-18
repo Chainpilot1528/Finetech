@@ -49,7 +49,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh">
-      <header className="border-b border-line bg-white print:hidden">
+      <header className="sticky top-0 z-20 border-b border-line bg-white/85 backdrop-blur-md print:hidden">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
           <Link href="/app/dashboard" aria-label={t.brand.name}><Logo /></Link>
           <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-auto rounded-lg border border-line px-3 py-2 text-sm md:hidden">{t.nav.menu}</button>

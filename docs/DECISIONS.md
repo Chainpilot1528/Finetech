@@ -47,6 +47,7 @@ Why Vittora is built the way it is, including what we chose **not** to do. Read 
 | D-029 | 2026-11-09 | CI runs the browser tests against a production build | Technical | Accepted |
 | D-030 | 2026-11-17 | A free, non-AWS demo server in India for client testing | Technical | Accepted |
 | D-031 | 2026-11-18 | Demo link from a Mac through a Cloudflare quick tunnel, no card | Technical | Accepted |
+| D-032 | 2026-11-18 | UI refresh: minimal cards, aurora green on sign-in, calm consent page | Product | Proposed |
 
 ---
 
@@ -227,6 +228,11 @@ architecture reviews shouldn't re-propose changes to them without new evidence.
 - **Trigger to revisit:** the client needs an always-on link, or a card becomes available (then D-030).
 - **Update 2026-11-18:** app pages accept either the site or the inbox password. Browsers keep one password per site, so after opening the inbox every request carried the inbox password and the app asked for the site password again.
 - **Owner:** lead engineer · **Date:** 2026-11-18
+
+### D-032 · UI refresh: minimal cards, aurora green on sign-in, calm consent page — Proposed
+- **Decision:** solid white "minimal" cards everywhere, for readability. Partner sign-in: centred card on a slowly moving aurora green background with soft finance icons and example cards. Partner sign-up: the same, with an example case journey beside the form. Staff sign-in: plain green, nothing moving. Customer consent page: light and still. Dashboard: faint grid and line drawings behind solid cards, staggered fade-in, a real approval ring and stage bars. Inter and Space Grotesk fonts, self-hosted so the strict content security policy holds. All motion stops for people who ask their device for less motion.
+- **Not chosen:** frosted glass forms (harder to read, slow on cheaper phones); neumorphism (low contrast); flashy styles such as liquid, crystal, metal or holographic (wrong tone for lending).
+- **Owner:** product owner to confirm · **Date:** 2026-11-18
 
 ---
 

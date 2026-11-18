@@ -1,6 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
 import { nextStep } from '@/features/auth/use-me';
@@ -31,7 +32,8 @@ export default function OpsSignInPage() {
   }
 
   return (
-    <AuthShell title={t.ops.signInTitle} subtitle={t.ops.signInSubtitle}>
+    <AuthShell variant="staff" title={t.ops.signInTitle} subtitle={t.ops.signInSubtitle}
+      footer={<>{t.scene.partnerQuestion} <Link href="/signin">{t.scene.partnerLink}</Link></>}>
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
         <Field label={t.signIn.email} name="email" type="email" autoComplete="username" required />

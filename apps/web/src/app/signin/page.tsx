@@ -30,7 +30,8 @@ export default function SignInPage() {
   }
 
   return (
-    <AuthShell title={t.signIn.title} subtitle={t.signIn.subtitle}>
+    <AuthShell title={t.signIn.title} subtitle={t.signIn.subtitle}
+      footer={<>{t.scene.staffQuestion} <Link href="/ops/signin">{t.scene.staffLink}</Link></>}>
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
         <Field label={t.signIn.email} type="email" autoComplete="username" name="email" required />

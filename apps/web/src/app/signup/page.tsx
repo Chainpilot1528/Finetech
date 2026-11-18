@@ -41,7 +41,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <AuthShell title={t.signUp.title} subtitle={t.signUp.subtitle}>
+    <AuthShell variant="join" title={t.signUp.title} subtitle={t.signUp.subtitle}>
       {done ? (
         <Alert tone="success">{t.signUp.done}</Alert>
       ) : (

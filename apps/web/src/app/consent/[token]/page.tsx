@@ -27,9 +27,12 @@ export default function ConsentPageView() {
   const codeError = agree.error instanceof ApiError ? agree.error.fields.code ?? agree.error.message : agree.error?.message;
 
   return (
-    <main className="mx-auto max-w-md space-y-5 px-4 py-10">
+    // Calm and plain on purpose (UI refresh): customers open this from a text on their phone.
+    <main className="v-grid-light min-h-dvh px-4 py-10">
+     <div className="mx-auto max-w-md space-y-6">
       <Logo />
-      <h1 className="text-2xl font-bold tracking-tight">{t.consent.title}</h1>
+      <section className="space-y-5 rounded-3xl border border-line bg-white p-6 shadow-[0_20px_50px_rgba(10,79,68,.08)] sm:p-8">
+      <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">{t.consent.title}</h1>
       {page.isPending && <Skeleton className="h-48" />}
       {page.isError && <Alert>{t.consent.expired}</Alert>}
       {page.data && (
@@ -38,7 +41,7 @@ export default function ConsentPageView() {
         ) : (
           <>
             <p className="text-sm"><strong>{page.data.partnerName}</strong> {t.consent.intro} <strong>{page.data.lenderName}</strong>.</p>
-            <p className="rounded-xl border border-line bg-white p-4 text-sm leading-relaxed">{page.data.text}</p>
+            <p className="rounded-2xl bg-paper p-4 text-sm leading-relaxed">{page.data.text}</p>
             {send.isError && <Alert>{send.error.message}</Alert>}
             {!send.isSuccess ? (
               <>
@@ -58,6 +61,8 @@ export default function ConsentPageView() {
           </>
         )
       )}
+      </section>
+     </div>
     </main>
   );
 }

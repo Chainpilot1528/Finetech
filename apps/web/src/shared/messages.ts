@@ -1,6 +1,25 @@
 /** All screen copy lives here, ready for Hindi later (§14.9). */
 export const t = {
   brand: { name: 'Vittora', tagline: 'Every loan case, in one place.' },
+  /** Decorative examples on the signed-out screens. Hidden from screen readers; not real data. */
+  scene: {
+    approved: 'Case approved',
+    disbursed: 'Disbursed',
+    disbursedAmount: '₹4,50,000',
+    commission: 'Commission',
+    commissionAmount: '₹4,500',
+    journeyLabel: 'How a case moves through Vittora',
+    journeyCase: 'Example case · Personal loan',
+    journeyAmount: '₹5,00,000',
+    stamp: 'DISBURSED',
+    journeySteps: ['Registered', 'In review with the lender', 'Approved by the lender', 'Disbursal in progress', 'Disbursed · commission on its way'],
+    journeyHeading: 'See every case move, step by step.',
+    journeyBody: 'From registration to disbursal, and what you are owed.',
+    staffQuestion: 'Vittora staff?',
+    staffLink: 'Staff sign in',
+    partnerQuestion: 'A loan partner?',
+    partnerLink: 'Partner sign in',
+  },
   common: {
     retry: 'Try again',
     loading: 'Loading…',
@@ -9,8 +28,8 @@ export const t = {
     backToSignIn: 'Back to sign in',
   },
   signIn: {
-    title: 'Sign in',
-    subtitle: 'Use your partner account.',
+    title: 'Welcome back',
+    subtitle: 'Sign in to your partner account.',
     email: 'Email address',
     password: 'Password',
     submit: 'Sign in',

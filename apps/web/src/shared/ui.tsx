@@ -9,7 +9,7 @@ export const fieldValue = (e: FormEvent<HTMLFormElement>, name: string) =>
   String(new FormData(e.currentTarget).get(name) ?? '');
 
 const CONTROL =
-  'block w-full rounded-lg border bg-white px-3 py-2.5 text-base text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25';
+  'block w-full rounded-xl border bg-[#fbfcfb] px-3.5 py-3 text-base text-ink outline-none transition-colors focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/25';
 
 export function Field({ label, error, hint, ...input }: InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string; hint?: string }) {
   const id = useId();
@@ -51,7 +51,7 @@ export function Button({ busy, children, ghost, ...rest }: ButtonHTMLAttributes<
     <button
       {...rest}
       disabled={busy || rest.disabled || (rest.type === 'submit' && !ready)}
-      className={`inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-60 ${look} ${rest.className ?? ''}`}
+      className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-60 ${look} ${rest.className ?? ''}`}
     >
       {busy ? t.common.loading : children}
     </button>
@@ -102,8 +102,8 @@ export const Cell = ({ children, strong }: { children?: ReactNode; strong?: bool
 
 export function Card({ title, children, className = '' }: { title?: string; children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-xl border border-line bg-white p-5 ${className}`}>
-      {title && <h2 className="mb-3 font-semibold">{title}</h2>}
+    <section className={`rounded-2xl border border-line bg-white p-5 shadow-[0_1px_3px_rgba(10,79,68,.06)] ${className}`}>
+      {title && <h2 className="mb-3 font-display text-lg font-semibold">{title}</h2>}
       {children}
     </section>
   );
