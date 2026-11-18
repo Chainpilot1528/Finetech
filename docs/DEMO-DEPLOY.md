@@ -1,27 +1,57 @@
 # Demo link for client testing
 
-Two free ways to give a client a test link. Neither uses AWS or anything built on it.
+Free ways to give a client a test link. None uses AWS or anything built on it.
 
-| | From your Mac (`pnpm demo:tunnel`) | Oracle Cloud server |
-|---|---|---|
-| Card needed | **No** | Yes, to verify you |
-| Works when | your Mac is on and the command is running | always |
-| Link | changes each time you start it | fixed |
-| Set-up | one command | about an hour, once |
+| | GitHub Codespaces | From your Mac (`pnpm demo:tunnel`) | Oracle Cloud server |
+|---|---|---|---|
+| Card needed | **No** | **No** | Yes, to verify you |
+| Laptop must stay on | **No** | Yes | No |
+| Works when | the codespace is running (stops when idle) | your Mac is on and the command is running | always |
+| Free limit | about 60 hours a month | none | none |
+| Link | changes each time you start it | changes each time you start it | fixed |
 
-> **Fake data only**, either way.
+> **Fake data only**, every way.
+
+---
+
+## Option 0: GitHub Codespaces, laptop can be off (D-033)
+
+Best for planned testing sessions ("please test today, 2 to 6 pm").
+
+**Once:**
+1. On github.com open **Settings → Codespaces**. Set **Default idle timeout** to **240 minutes** (the most allowed), and
+   **Default retention period** to a few days.
+2. Open the repository on github.com, click **Code → Codespaces → Create codespace on main** (or on the
+   branch you want to show). Pick the **2-core** machine if asked; bigger ones use the free hours faster. The first start takes a few minutes while it installs everything.
+
+**Each session:**
+1. Open the codespace (github.com/codespaces, or from your phone). In its terminal run:
+
+   ```bash
+   pnpm demo:tunnel
+   ```
+
+   It starts the database, creates the fake accounts the first time, builds the app and prints the link
+   (about 2 to 3 minutes).
+2. Open `links.txt`, `.dev/demo-passwords.env` and `.dev/seed-credentials.md` in the codespace's file list, and send the client
+   what Option A step 3 lists. You can now close the codespace's browser tab and turn the laptop off.
+3. After testing, stop it so it stops using free hours: github.com/codespaces → **⋯** next to it →
+   **Stop codespace**.
+
+**Things to know**
+- A codespace stops by itself after the idle timeout with nobody working in it, and the link dies. Start
+  it again and run `pnpm demo:tunnel` for a new link. The fake accounts and cases are kept.
+- The free allowance is about 60 hours a month on a 2-core machine, plus some storage. Delete codespaces
+  you no longer need. GitHub shows your use under **Settings → Billing**. With no payment method set, it stops at the limit rather than charging.
+- Passwords are created inside the codespace and never go into the repository.
 
 ---
 
 ## Option A: from your Mac, no card (D-031)
 
-1. In one terminal, start the database and leave it running:
+1. You can start the database yourself with `pnpm db`, or let the next step start it.
 
-   ```bash
-   pnpm db
-   ```
-
-2. Stop `pnpm dev` if it's running. In a second terminal, run:
+2. Stop `pnpm dev` if it's running. In a terminal, run:
 
    ```bash
    pnpm demo:tunnel

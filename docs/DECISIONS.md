@@ -48,6 +48,7 @@ Why Vittora is built the way it is, including what we chose **not** to do. Read 
 | D-030 | 2026-11-17 | A free, non-AWS demo server in India for client testing | Technical | Accepted |
 | D-031 | 2026-11-18 | Demo link from a Mac through a Cloudflare quick tunnel, no card | Technical | Accepted |
 | D-032 | 2026-11-18 | UI refresh: minimal cards, aurora green on sign-in, calm consent page | Product | Proposed |
+| D-033 | 2026-11-19 | Demo link from a GitHub codespace, so the laptop can be off | Technical | Accepted |
 
 ---
 
@@ -233,6 +234,16 @@ architecture reviews shouldn't re-propose changes to them without new evidence.
 - **Decision:** solid white "minimal" cards everywhere, for readability. Partner sign-in: centred card on a slowly moving aurora green background with soft finance icons and example cards. Partner sign-up: the same, with an example case journey beside the form. Staff sign-in: plain green, nothing moving. Customer consent page: light and still. Dashboard: faint grid and line drawings behind solid cards, staggered fade-in, a real approval ring and stage bars. Inter and Space Grotesk fonts, self-hosted so the strict content security policy holds. All motion stops for people who ask their device for less motion.
 - **Not chosen:** frosted glass forms (harder to read, slow on cheaper phones); neumorphism (low contrast); flashy styles such as liquid, crystal, metal or holographic (wrong tone for lending).
 - **Owner:** product owner to confirm · **Date:** 2026-11-18
+
+### D-033 · Demo link from a GitHub codespace, so the laptop can be off — Accepted
+- **Decision:** `pnpm demo:tunnel` also runs in a GitHub codespace (`.devcontainer/`). It starts the database and creates the fake accounts itself, and uses the same Cloudflare quick tunnel and password proxy as D-031.
+- **Context:** the client should be able to test without the developer's laptop staying on, at no cost and with no card.
+- **Why:** Codespaces is free for personal accounts within a monthly allowance, needs no card and runs on Microsoft Azure, not AWS. Reusing the tunnel avoids relying on GitHub's own port links and keeps one tested path.
+- **Not chosen:** Vercel, Supabase, Render and similar free hosts (built on AWS); Oracle free tier (needs a card); a paid server (no spend for now).
+- **Changes D-031:** D-031 set Codespaces aside for being outside India and stopping when idle. Both still hold; they are acceptable for fake-data testing windows.
+- **Limits:** not always on. It stops after its idle timeout and uses free hours while running, so it suits planned testing windows. The link changes each start. Fake data only, as D-030.
+- **Trigger to revisit:** the client needs a link that works at any time, or real data is involved.
+- **Owner:** lead engineer · **Date:** 2026-11-19
 
 ---
 

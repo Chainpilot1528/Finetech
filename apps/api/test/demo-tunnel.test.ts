@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkAccess, linksText } from '../../../scripts/demo-auth.js';
+import { cloudflaredAsset } from '../../../scripts/demo-tools.js';
 
 /** The demo tunnel's password proxy (D-031). */
 const pw = { SITE_USER: 'client', SITE_PASS: 'site-secret', INBOX_USER: 'inbox', INBOX_PASS: 'inbox-secret' };
@@ -33,5 +34,22 @@ describe('links.txt', () => {
       expect(text).toContain(`https://abc-def.trycloudflare.com${path}`);
     }
     expect(text).not.toMatch(/PASS=/);
+  });
+});
+
+describe('cloudflared download', () => {
+  const base = 'https://github.com/cloudflare/cloudflared/releases/latest/download/';
+  it('fetches the Mac archive on a Mac', () => {
+    expect(cloudflaredAsset('darwin', 'arm64')).toEqual({ url: `${base}cloudflared-darwin-arm64.tgz`, archive: true });
+    expect(cloudflaredAsset('darwin', 'x64')).toEqual({ url: `${base}cloudflared-darwin-amd64.tgz`, archive: true });
+  });
+
+  it('fetches the plain Linux program in a codespace', () => {
+    expect(cloudflaredAsset('linux', 'x64')).toEqual({ url: `${base}cloudflared-linux-amd64`, archive: false });
+    expect(cloudflaredAsset('linux', 'arm64')).toEqual({ url: `${base}cloudflared-linux-arm64`, archive: false });
+  });
+
+  it('refuses other systems', () => {
+    expect(() => cloudflaredAsset('win32', 'x64')).toThrow(/macOS or Linux/);
   });
 });

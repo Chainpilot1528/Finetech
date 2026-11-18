@@ -6,7 +6,8 @@
  *                                                             └─▶ /inbox  (test inbox, its own password)
  *   API ──smtp──▶ test inbox :2525 (every email and text lands here; nothing is really sent)
  *
- * Needs `pnpm db` running in another terminal and `pnpm dev` stopped.
+ * Starts the database itself if `pnpm db` isn't already running, and creates the fake accounts on the
+ * first run. Needs `pnpm dev` stopped. Also runs in a GitHub codespace, so the laptop can be off (D-033).
  * `pnpm demo:tunnel --no-tunnel` runs everything except the tunnel, to check it locally.
  */
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
@@ -14,11 +15,12 @@ import { randomBytes } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { createConnection } from 'node:net';
-import { arch } from 'node:os';
+import { arch, platform } from 'node:os';
 import { resolve } from 'node:path';
 import { simpleParser } from 'mailparser';
 import { SMTPServer } from 'smtp-server';
 import { checkAccess, type DemoPasswords, linksText } from './demo-auth.js';
+import { cloudflaredAsset } from './demo-tools.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const DIR = resolve(ROOT, '.dev/demo');
@@ -26,8 +28,10 @@ const PROXY_PORT = 8080;
 const SMTP_PORT = 2525;
 const WEB_PORT = 3000;
 const noTunnel = process.argv.includes('--no-tunnel');
+const codespace = process.env.CODESPACES === 'true';
 
 process.chdir(ROOT);
+if (!existsSync('.env')) { console.error('No .env yet. Run: pnpm setup:env'); process.exit(1); }
 process.loadEnvFile('.env');
 mkdirSync(DIR, { recursive: true });
 const API_PORT = Number(process.env.API_PORT ?? 4000);
@@ -79,15 +83,23 @@ function run(name: string, cmd: string, args: string[], env: Record<string, stri
   return { child, log };
 }
 
-// Keep the Mac from idle-sleeping while the demo runs (macOS built-in; closing the lid still sleeps).
+// Keep a Mac from idle-sleeping while the demo runs (macOS built-in; closing the lid still sleeps).
 spawn('caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' }).on('error', () => {});
 
-// ---- 1. Checks -------------------------------------------------------------------------------------
-if (!(await portOpen(DB_PORT))) fail(`The database isn't running. Start it in another terminal with: pnpm db`);
+// ---- 1. Checks, database and fake accounts ----------------------------------------------------------
 for (const [port, what] of [[WEB_PORT, 'the web app'], [API_PORT, 'the API'], [PROXY_PORT, 'the password proxy'], [SMTP_PORT, 'the test inbox']] as const) {
   if (await portOpen(port)) fail(`Port ${port} (${what}) is already in use. Stop \`pnpm dev\` or the other demo first.`);
 }
-if (!existsSync('.dev/seed-credentials.md')) fail('No fake accounts yet. Run: pnpm seed');
+if (!(await portOpen(DB_PORT))) {
+  console.log('Starting the database…');
+  const db = run('db', 'pnpm', ['db']);
+  await waitFor('The database', async () => existsSync(db.log) && readFileSync(db.log, 'utf8').includes('Database ready'), 180, db.log);
+}
+if (!existsSync('.dev/seed-credentials.md')) {
+  console.log('Creating the fake accounts (first run only)…');
+  try { execFileSync('pnpm', ['seed'], { stdio: ['ignore', 'ignore', 'pipe'] }); }
+  catch (err) { fail(`Could not create the fake accounts.\n${String((err as { stderr?: Buffer }).stderr ?? err).slice(-2000)}`); }
+}
 
 // ---- 2. Passwords (kept in .dev, never committed) ------------------------------------------------------
 const pwFile = resolve(ROOT, '.dev/demo-passwords.env');
@@ -125,7 +137,9 @@ h2{font-size:16px;margin:0 0 4px}small{color:#666}pre{white-space:pre-wrap;word-
 ${inbox.length ? inbox.map((m) => `<article><h2>${esc(m.subject)}</h2><small>To ${esc(m.to)} · ${esc(m.at)}</small><pre>${linkify(m.text)}</pre></article>`).join('') : '<p>No messages yet.</p>'}`;
 
 // ---- 4. Password proxy in front of everything ----------------------------------------------------------
+let requests = 0;
 const proxy = http.createServer((req, res) => {
+  requests++;
   const url = req.url ?? '/';
   const access = checkAccess(url, req.headers.authorization, pw);
   if (!access.ok) {
@@ -155,15 +169,18 @@ async function cloudflaredPath() {
   }
   const local = resolve(ROOT, '.dev/tools/cloudflared');
   if (existsSync(local)) return local;
-  const asset = `cloudflared-darwin-${arch() === 'arm64' ? 'arm64' : 'amd64'}.tgz`;
-  const url = `https://github.com/cloudflare/cloudflared/releases/latest/download/${asset}`;
-  console.log(`Downloading Cloudflare's tunnel tool once, from ${url}`);
+  let asset: ReturnType<typeof cloudflaredAsset>;
+  try { asset = cloudflaredAsset(platform(), arch()); } catch (err) { fail((err as Error).message); }
+  console.log(`Downloading Cloudflare's tunnel tool once, from ${asset.url}`);
   mkdirSync(resolve(ROOT, '.dev/tools'), { recursive: true });
-  const res = await fetch(url);
-  if (!res.ok) fail(`Could not download cloudflared (${res.status}). Download ${asset} from github.com/cloudflare/cloudflared/releases and put the cloudflared file in .dev/tools/`);
-  const tgz = resolve(ROOT, `.dev/tools/${asset}`);
-  writeFileSync(tgz, Buffer.from(await res.arrayBuffer()));
-  execFileSync('tar', ['-xzf', tgz, '-C', resolve(ROOT, '.dev/tools')]);
+  const res = await fetch(asset.url);
+  if (!res.ok) fail(`Could not download cloudflared (${res.status}). Download it from github.com/cloudflare/cloudflared/releases and put the cloudflared file in .dev/tools/`);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (asset.archive) {
+    const tgz = resolve(ROOT, '.dev/tools/cloudflared.tgz');
+    writeFileSync(tgz, bytes);
+    execFileSync('tar', ['-xzf', tgz, '-C', resolve(ROOT, '.dev/tools')]);
+  } else writeFileSync(local, bytes);
   execFileSync('chmod', ['+x', local]);
   return local;
 }
@@ -217,6 +234,14 @@ console.log(`
   App logins:  .dev/seed-credentials.md  (fake accounts)
   All links:   links.txt
 
-  The link changes every time you start this. Keep this terminal open and the Mac awake.
-  Press Ctrl+C to stop.
+  The link changes every time you start this. ${codespace
+    ? 'Keep this terminal running. When testing is over, press Ctrl+C\n  and stop the codespace on github.com/codespaces so it stops using your free hours.'
+    : 'Keep this terminal open and the Mac awake.\n  Press Ctrl+C to stop.'}
 `);
+
+// While the client is using the demo, say so every 5 minutes, so the owner can see it is in use.
+// Prints nothing when nobody is using it. A codespace's idle timer still decides when it stops.
+setInterval(() => {
+  if (requests) console.log(`${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST  ${requests} requests in the last 5 minutes`);
+  requests = 0;
+}, 5 * 60_000);
