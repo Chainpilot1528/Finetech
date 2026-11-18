@@ -3,6 +3,8 @@
   // Steps are in docs/DEMO-DEPLOY.md. No secrets live here: .env and passwords are made inside the codespace.
   "name": "Vittora demo",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  // sshd lets `gh codespace ssh` start the demo from the developer's own terminal.
+  "features": { "ghcr.io/devcontainers/features/sshd:1": {} },
   "hostRequirements": { "cpus": 2, "memory": "8gb" },
   "postCreateCommand": "sudo corepack enable && corepack install && pnpm install && pnpm setup:env",
   "forwardPorts": [],
